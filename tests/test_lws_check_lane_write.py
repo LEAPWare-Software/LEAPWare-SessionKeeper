@@ -170,6 +170,61 @@ def test_write_inside_a_linked_worktree_is_classified_by_its_inner_path():
     assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+def test_relative_dotdot_into_the_other_lane_is_denied():
+    """`plugins/codex/../../plugins/claude/evil.py` really targets claude.
+
+    classify_path does plain prefix matching, so an unresolved `..` lets a
+    path advertise one lane and land in another. This needs no Windows trick
+    at all, and a relative path is codex's only transport: apply_patch names
+    files with repo-relative `*** Update File:` headers.
+    """
+    patch = "*** Update File: plugins/codex/../../plugins/claude/evil.py\n"
+    out = evaluate("codex", {"tool_name": "apply_patch", "tool_input": {"input": patch}})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    out = evaluate("claude", {"tool_name": "Write",
+                              "tool_input": {"file_path": "plugins/claude/../codex/evil.py"}})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_relative_dotdot_climbing_out_of_the_repo_fails_closed():
+    # A relative path that escapes the repo cannot be shown to be outside it
+    # -- it is resolved against whatever the process's working directory
+    # happens to be -- so it denies rather than being waved through.
+    out = evaluate("claude", {"tool_name": "Write",
+                              "tool_input": {"file_path": "../../elsewhere/evil.py"}})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_relative_dotdot_that_stays_in_lane_is_still_allowed():
+    out = evaluate("claude", {"tool_name": "Write",
+                              "tool_input": {"file_path": "tests/../plugins/claude/ok.py"}})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+
+def test_worktree_prefix_is_found_for_a_branch_name_containing_a_slash(tmp_path,
+                                                                      monkeypatch):
+    """Branch names have slashes, so a worktree is not always one level deep.
+
+    `.worktrees/fix/lane-classify/...` is the shape this repo's own branch
+    names produce. Stripping exactly two segments leaves `lane-classify/...`,
+    which classifies "other" and denies everything in that worktree -- the
+    very bug the worktree mapping exists to fix.
+    """
+    import lws_check_lane_write as mod
+
+    fake_root = tmp_path / "repo"
+    wt = fake_root / mod.WORKTREE_DIR / "fix" / "lane-classify"
+    (wt / "plugins" / "codex").mkdir(parents=True)
+    (wt / ".git").write_text("gitdir: ../../.git/worktrees/x\n", encoding="utf-8")
+
+    monkeypatch.setattr(mod, "REPO_ROOT", fake_root)
+    assert mod._strip_worktree_prefix(
+        ".worktrees/fix/lane-classify/tests/test_x.py") == "tests/test_x.py"
+    assert mod._strip_worktree_prefix(
+        ".worktrees/fix/lane-classify/plugins/codex/x.py") == "plugins/codex/x.py"
+
+
 def test_unresolvable_path_fails_closed():
     # None from _relativize means "known to be outside the repo". A path the
     # OS refuses to resolve is not known to be anything, so it must deny.

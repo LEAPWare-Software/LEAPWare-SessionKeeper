@@ -26,10 +26,11 @@ that is all its matcher subscribes to. A write performed through a shell --
 reaches it at all. So it is a same-session nudge and must not be read as a
 security boundary: it catches the mistake, not the determined evader. The
 `lws-lanes` CI check is the enforcement of record, and it works on what was
-actually committed, which no spelling of a path can disguise. Two adversarial
-reviews of this file found path-aliasing evasions (`\\\\?\\`, `//?/`, UNC
-admin shares) and all are closed below, but the shell-shaped hole is
-structural and stays open by design.
+actually committed, which no spelling of a path can disguise -- a git tree
+path can never contain a `..` component or a UNC prefix. Three rounds of
+adversarial review of this file found evasions (`\\\\?\\`, `//?/`, UNC admin
+shares, and an unresolved `..` in a relative path) and all are closed below,
+but the shell-shaped hole is structural and stays open by design.
 
 If no file path can be determined from the event shape, this hook does
 NOT deny — silently allowing an edit it can't parse is the safe failure
@@ -48,6 +49,7 @@ body, not the exit code — see docs/install-claude.md / docs/install-codex.md).
 from __future__ import annotations
 
 import json
+import posixpath
 import re
 import sys
 from pathlib import Path
@@ -94,7 +96,13 @@ def _extract_paths(agent: str, raw: dict) -> list[str]:
 
 
 WORKTREE_DIR = ".worktrees"
-_MAX_ANCESTOR_WALK = 64
+
+# Belt-and-braces only: the walk already terminates when a path is its own
+# parent. Measured at roughly 0.8ms for a 100-level walk, so a bound generous
+# enough to never be the reason an in-repo file reads as "outside" costs
+# nothing. At 64 it was reachable -- a file more than ~60 levels below the
+# repo root, reached through an alias, returned None and was allowed.
+_MAX_ANCESTOR_WALK = 512
 
 
 def _strip_extended_prefix(path_str: str) -> str:
@@ -162,11 +170,25 @@ def _strip_worktree_prefix(rel: str) -> str:
     `.worktrees/<branch>`, so classifying by the literal path makes every file
     in a worktree "other" -- and the guard then denies every edit made in one,
     including the edits needed to fix the guard.
+
+    `<branch>` is not always one segment. A branch name containing a slash --
+    `fix/lane-classify`, the shape this repo's own branches use -- nests on
+    disk, so the worktree root is found by looking for the `.git` entry every
+    checkout carries rather than by counting segments. Only when no checkout
+    is found does it fall back to stripping two, which merely restores the
+    previous behaviour for a path that does not exist on disk.
     """
     parts = rel.split("/")
-    if len(parts) > 2 and parts[0] == WORKTREE_DIR:
-        return "/".join(parts[2:])
-    return rel
+    if len(parts) <= 2 or parts[0] != WORKTREE_DIR:
+        return rel
+
+    for depth in range(2, len(parts)):
+        try:
+            if (REPO_ROOT.joinpath(*parts[:depth]) / ".git").exists():
+                return "/".join(parts[depth:])
+        except OSError:
+            break
+    return "/".join(parts[2:])
 
 
 def _relativize(path_str: str) -> Optional[str]:
@@ -188,7 +210,18 @@ def _relativize(path_str: str) -> Optional[str]:
     try:
         p = Path(candidate)
         if not p.is_absolute():
-            return _strip_worktree_prefix(candidate.replace("\\", "/"))
+            # `..` has to be collapsed before classification. classify_path
+            # matches prefixes, so `plugins/codex/../../plugins/claude/x.py`
+            # otherwise reads as codex's lane while targeting claude's -- and
+            # a repo-relative path is exactly what codex's apply_patch
+            # `*** Update File:` header carries.
+            norm = posixpath.normpath(candidate.replace("\\", "/"))
+            if norm == ".." or norm.startswith("../"):
+                # Escapes the repo, but relative to what? It resolves against
+                # the process's working directory, which this hook does not
+                # know. Undeterminable, so fail closed.
+                return path_str.replace("\\", "/")
+            return _strip_worktree_prefix(norm)
         resolved = p.resolve()
         root = REPO_ROOT.resolve()
     except (OSError, ValueError):
