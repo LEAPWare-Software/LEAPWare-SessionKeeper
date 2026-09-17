@@ -44,13 +44,13 @@ step *n* is done and proven.
 
 <!-- lwr-handoff:begin -->
 
-Generated: 2026-09-17 15:22 UTC
+Generated: 2026-09-17 15:25 UTC
 main SHA: 01be6fddcec33f90e2c7e5bd519827c583fd818b
 CLI: claude
-Session: bootstrap-2026-09-17
+Session: bootstrap-2026-09-17-pr1
 
 Open PRs:
-(unavailable: no `gh` auth in this environment, or no open PRs)
+#1 Bootstrap LWR repository setup (lwr-bootstrap)
 
 Deliverable proof state (from proof/):
 (none yet)
