@@ -22,24 +22,26 @@ step *n* is done and proven.
 
 1. Work from this repo only. Clone fresh on any machine; no dependence on
    the local environment. **SACRED.**
-2. Repo created 2026-09-17: `main` carries the meta-files-only initial
-   commit only. The bootstrap PR (branch `lws-bootstrap`, containing
-   everything else — core, adapters, plugins, scripts, tests, docs,
-   `.github/`) is being opened now; its number is not yet known — read it
-   from `gh pr list` below, not from this prose. Once its required checks
-   are green, enable auto-merge / add it to the merge queue (squash). The
-   merge happens through GitHub's merge queue, never a local merge.
-3. Create the two GitHub Apps (`lws-claude`, `lws-codex`) from the
+2. DONE — bootstrap PR #1 (branch `lws-bootstrap`, everything but the
+   meta-files-only initial commit: core, adapters, plugins, scripts,
+   tests, docs, `.github/`) merged through the merge queue, sha
+   `29d8dd96459e4c08df49810c7dc16fc64791b659`. The repo is now worked
+   from its own Claude session opened in its own folder.
+3. Implement the hosted-runner-only CI check (directive a in
+   `docs/requirements/owner-directives.md`): a CI check that fails on any
+   `runs-on` value other than a GitHub-hosted runner, proven by breaking
+   it on purpose.
+4. Create the two GitHub Apps (`lws-claude`, `lws-codex`) from the
    committed manifests in `.github/apps/`, using a browser-enabled
    session. Install each on this repo only. Store each private key in the
    owner's secrets manager, never in the repo. Record App ids in
    `docs/maintainers/github-apps.md` via PR.
-4. ENTER PLAN MODE (each CLI in its own lane) and build the full plan to
+5. ENTER PLAN MODE (each CLI in its own lane) and build the full plan to
    ship lws 1.0.0, starting with the complete requirements package per
    `docs/requirements/approach.md`, seeded by
    `docs/requirements/owner-directives.md`. Present the plan to the owner
    for approval before building.
-5. Every deliverable follows `docs/handoff-protocol.md`: proof record,
+6. Every deliverable follows `docs/handoff-protocol.md`: proof record,
    pushed, CI green, alert line `LWS - Alert: <id> DONE ...`.
 
 <!-- lws-handoff:begin -->

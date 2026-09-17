@@ -67,3 +67,9 @@ owner's original, unelaborated wording.
     rehearsal — proof record only); a one-day comparison of LWS's
     readings against the CLI's own real usage display; a real
     unattended restart; an independent proof record.
+18. (2026-09-17) Public repos use GitHub-hosted runners only, never
+    self-hosted or local; add a CI check that fails on any `runs-on`
+    value other than a GitHub-hosted runner, proven by breaking it on
+    purpose.
+19. (2026-09-17) Worktrees live only under `.worktrees/<branch>`, never
+    as sibling folders.
