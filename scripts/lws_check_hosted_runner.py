@@ -24,6 +24,16 @@ mappings, block sequences, inline flow sequences, and opaque block scalars
 `jobs.<id>.strategy.matrix.<key>`, and nothing more. Anything it does not
 understand becomes an error rather than a silent pass.
 
+Known limitation -- this gate is self-referential, and that bounds what it
+can promise. For a pull request from a FORK, GitHub runs the job and step
+definitions from the base ref against the fork's file content, so a fork
+cannot strip this step out; the check still runs and still reads the merged
+tree. For a branch in THIS repo, or a direct push, the contributor's own
+version of the workflow runs, so a commit may delete this step and that same
+commit's CI will simply not execute it. No script can close that: it is
+closed by the ruleset (required reviews plus required status checks), not
+here. Do not read a green run as proof that nobody could have removed it.
+
 Usage:
     python scripts/lws_check_hosted_runner.py
     python scripts/lws_check_hosted_runner.py --workflows-dir path/to/workflows
@@ -40,15 +50,27 @@ from typing import Union
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# Curated allow-list of GitHub-hosted runner labels. Deliberately exact: a
-# label that merely looks hosted (`ubuntu-latest-8core`) is a larger-runner
-# name an owner configures, indistinguishable from a self-hosted label, so it
-# fails until someone adds it here on purpose.
-HOSTED_LABEL_PATTERNS = (
-    re.compile(r"ubuntu-(?:latest|\d{2}\.\d{2})(?:-arm)?"),
-    re.compile(r"windows-(?:latest|\d{4})(?:-arm)?"),
-    re.compile(r"macos-(?:latest|\d{2})(?:-large|-xlarge)?"),
-)
+# Curated allow-list of GitHub-hosted runner labels, held as an explicit set
+# rather than a regex on purpose: a regex silently decides the fate of labels
+# nobody checked. `windows-11-arm` is exactly that trap -- a real, generally
+# available hosted Arm64 runner that a `windows-\d{4}` pattern rejects.
+#
+# Deliberately exact. A label that merely looks hosted (`ubuntu-latest-8core`)
+# is a larger-runner name an owner configures, indistinguishable from a
+# self-hosted label, so it fails until someone adds it here on purpose. A new
+# hosted image (a future `ubuntu-26.04`) also fails until added -- fail-closed
+# means the update is deliberate, and this list needs review as GitHub's
+# lineup changes.
+HOSTED_LABELS = frozenset({
+    "ubuntu-latest", "ubuntu-24.04", "ubuntu-22.04", "ubuntu-20.04",
+    "ubuntu-24.04-arm", "ubuntu-22.04-arm",
+    "windows-latest", "windows-2025", "windows-2022", "windows-2019",
+    "windows-11-arm",
+    "macos-latest", "macos-15", "macos-14", "macos-13",
+    "macos-latest-large", "macos-latest-xlarge",
+    "macos-15-large", "macos-14-large", "macos-13-large",
+    "macos-15-xlarge", "macos-14-xlarge", "macos-13-xlarge",
+})
 
 MATRIX_EXPR_RE = re.compile(r"^\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}$")
 ANY_EXPR_RE = re.compile(r"\$\{\{.*\}\}")
@@ -60,7 +82,7 @@ def is_hosted_label(label: str) -> bool:
     """True only for a label this file recognises as GitHub-hosted."""
     if not isinstance(label, str):
         return False
-    return any(p.fullmatch(label.strip()) for p in HOSTED_LABEL_PATTERNS)
+    return label.strip().lower() in HOSTED_LABELS
 
 
 # --- the YAML subset --------------------------------------------------------
@@ -85,16 +107,35 @@ def _strip_comment(line: str) -> str:
     return "".join(out).rstrip()
 
 
+class MultiDocumentError(ValueError):
+    """Raised for a workflow file holding more than one YAML document."""
+
+
 def _significant_lines(text: str) -> list[tuple[int, str]]:
-    """(indent, content) for each line that carries structure."""
+    """(indent, content) for each line that carries structure.
+
+    A second `---` document marker raises: this reader has no concept of
+    documents, so two `jobs:` mappings would merge and the later one would
+    overwrite the earlier, hiding whatever runners the first one declared.
+    Refusing is the only honest answer.
+    """
     rows: list[tuple[int, str]] = []
+    seen_content = False
     for raw in text.splitlines():
         if raw.lstrip().startswith("#"):
             continue
         stripped = _strip_comment(raw)
         if not stripped.strip():
             continue
-        rows.append((len(stripped) - len(stripped.lstrip()), stripped.strip()))
+        content = stripped.strip()
+        if content == "---" or content.startswith("--- "):
+            if seen_content or rows:
+                raise MultiDocumentError(
+                    "multi-document YAML is not supported by this check"
+                )
+            seen_content = True
+            continue
+        rows.append((len(stripped) - len(stripped.lstrip()), content))
     return rows
 
 
@@ -117,13 +158,39 @@ def _parse_block(rows: list[tuple[int, str]], start: int, indent: int) -> tuple[
     if start >= len(rows):
         return {}, start
 
-    # A block sequence.
-    if rows[start][1].startswith("- "):
+    # A block sequence. Items may be scalars (`- ubuntu-latest`) or mappings
+    # (`- os: self-hosted` with further keys indented beneath) -- strategy
+    # matrix `include`/`exclude` entries are the latter, and reading them as
+    # scalars is what let a self-hosted `include` entry through unnoticed.
+    if rows[start][1] == "-" or rows[start][1].startswith("- "):
         items: list = []
         i = start
-        while i < len(rows) and rows[i][0] == indent and rows[i][1].startswith("- "):
-            items.append(_scalar(rows[i][1][2:]))
+        while i < len(rows) and rows[i][0] == indent and (
+            rows[i][1] == "-" or rows[i][1].startswith("- ")
+        ):
+            head = rows[i][1][2:].strip() if rows[i][1].startswith("- ") else ""
             i += 1
+
+            nested_start = i
+            while i < len(rows) and rows[i][0] > indent:
+                i += 1
+            nested = rows[nested_start:i]
+
+            if head and ":" in head and not head.startswith("["):
+                key, _, rest = head.partition(":")
+                entry: dict = {_scalar(key): _scalar(rest) if rest.strip() else ""}
+                if nested:
+                    more, _ = _parse_block(nested, 0, nested[0][0])
+                    if isinstance(more, dict):
+                        entry.update(more)
+                items.append(entry)
+            elif head:
+                items.append(_scalar(head))
+            elif nested:
+                more, _ = _parse_block(nested, 0, nested[0][0])
+                items.append(more)
+            else:
+                items.append("")
         return items, i
 
     mapping: dict = {}
@@ -215,13 +282,47 @@ def check_job(job_name: str, job: Node, where: str, errors: list[str]) -> None:
         key = matrix_match.group(1)
         strategy = job.get("strategy")
         matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
-        values = matrix.get(key) if isinstance(matrix, dict) else None
-        if isinstance(values, str) and values:
-            values = [values]
-        if not isinstance(values, list) or not values:
+        if not isinstance(matrix, dict):
+            errors.append(
+                f"{where}: job {job_name!r} runs on '{value}' but has no "
+                "strategy.matrix this check can resolve"
+            )
+            return
+
+        values: list = []
+        direct = matrix.get(key)
+        if isinstance(direct, str) and direct:
+            values.append(direct)
+        elif isinstance(direct, list):
+            values.extend(direct)
+
+        # `include` entries are not decoration: GitHub adds an entry matching
+        # no existing combination as an EXTRA job, so an `include` can name a
+        # runner the flat matrix list never mentions. `exclude` is ignored on
+        # purpose -- ignoring it can only over-report, which is the safe way
+        # to be wrong.
+        include = matrix.get("include")
+        if include is not None:
+            if not isinstance(include, list):
+                errors.append(
+                    f"{where}: job {job_name!r} has a strategy.matrix.include "
+                    "this check cannot parse"
+                )
+                return
+            for entry in include:
+                if not isinstance(entry, dict):
+                    errors.append(
+                        f"{where}: job {job_name!r} has a strategy.matrix.include "
+                        f"entry this check cannot parse: {entry!r}"
+                    )
+                    return
+                if key in entry:
+                    values.append(entry[key])
+
+        if not values:
             errors.append(
                 f"{where}: job {job_name!r} runs on '{value}' but "
-                f"strategy.matrix.{key} is not a list this check can resolve"
+                f"strategy.matrix.{key} resolves to nothing this check can read"
             )
             return
         _check_labels(values, f"{where} job {job_name!r} (matrix.{key})", errors)
@@ -245,6 +346,8 @@ def check_workflow(path: Path) -> list[str]:
         data = parse_workflow(path.read_text(encoding="utf-8"))
     except OSError as exc:
         return [f"{where}: could not be read: {exc}"]
+    except MultiDocumentError as exc:
+        return [f"{where}: {exc}"]
 
     jobs = data.get("jobs")
     if not isinstance(jobs, dict) or not jobs:
@@ -290,7 +393,7 @@ def main() -> int:
             print(f"FAIL: {e}")
         print(
             "\nOwner directive 18: GitHub-hosted runners only. Add a label to "
-            "HOSTED_LABEL_PATTERNS in this file only if it is genuinely a "
+            "HOSTED_LABELS in this file only if it is genuinely a "
             "GitHub-hosted runner."
         )
         return 1

@@ -127,6 +127,91 @@ def test_matrix_key_that_does_not_exist_fails_closed(tmp_path):
     assert hr.check_all(d) != []
 
 
+def test_matrix_include_adding_a_self_hosted_runner_is_caught(tmp_path):
+    """`include` entries add runner combinations the top-level lists never name.
+
+    GitHub adds an `include` entry that matches no existing combination as an
+    extra job. Reading only the flat `matrix.<key>` list therefore misses a
+    real, running self-hosted job -- a silent bypass of the whole gate.
+    """
+    d = _write(tmp_path, (
+        "jobs:\n"
+        "  a:\n"
+        "    strategy:\n"
+        "      matrix:\n"
+        "        os: [ubuntu-latest]\n"
+        "        include:\n"
+        "          - os: self-hosted\n"
+        "            extra: 1\n"
+        "    runs-on: ${{ matrix.os }}\n"
+    ))
+    errors = hr.check_all(d)
+    assert errors and any("self-hosted" in e for e in errors)
+
+
+def test_matrix_include_with_only_hosted_entries_passes(tmp_path):
+    d = _write(tmp_path, (
+        "jobs:\n"
+        "  a:\n"
+        "    strategy:\n"
+        "      matrix:\n"
+        "        os: [ubuntu-latest]\n"
+        "        include:\n"
+        "          - os: macos-14\n"
+        "            experimental: true\n"
+        "    runs-on: ${{ matrix.os }}\n"
+    ))
+    assert hr.check_all(d) == []
+
+
+def test_matrix_key_supplied_only_by_include_is_resolved(tmp_path):
+    # No top-level `os` key at all -- the value comes solely from include.
+    d = _write(tmp_path, (
+        "jobs:\n"
+        "  a:\n"
+        "    strategy:\n"
+        "      matrix:\n"
+        "        python: ['3.12']\n"
+        "        include:\n"
+        "          - os: self-hosted\n"
+        "    runs-on: ${{ matrix.os }}\n"
+    ))
+    errors = hr.check_all(d)
+    assert errors and any("self-hosted" in e for e in errors)
+
+
+def test_windows_11_arm_and_ubuntu_arm_are_hosted():
+    # Real, currently-shipping GitHub-hosted Arm64 labels. A pattern requiring
+    # a 4-digit Windows year rejects windows-11-arm, which is a false positive
+    # against a legitimate hosted runner.
+    for label in ("windows-11-arm", "ubuntu-24.04-arm", "ubuntu-22.04-arm"):
+        assert hr.is_hosted_label(label) is True, label
+
+
+def test_multi_document_workflow_is_rejected(tmp_path):
+    """Two `---`-separated documents must not silently merge.
+
+    The second document's `jobs:` key would otherwise overwrite the first's,
+    making a self-hosted runner in the first document disappear entirely.
+    """
+    d = _write(tmp_path, (
+        "jobs:\n"
+        "  a:\n"
+        "    runs-on: self-hosted\n"
+        "---\n"
+        "jobs:\n"
+        "  b:\n"
+        "    runs-on: ubuntu-latest\n"
+    ))
+    errors = hr.check_all(d)
+    assert errors and any("document" in e.lower() for e in errors)
+
+
+def test_single_leading_document_marker_is_allowed(tmp_path):
+    d = _write(tmp_path, "---\njobs:\n  a:\n    runs-on: ubuntu-latest\n")
+    assert hr.check_all(d) == []
+
+
 def test_non_matrix_expression_fails_closed(tmp_path):
     # An env/vars/input expression can resolve to a self-hosted label at run
     # time and cannot be checked statically. Fail-closed is the only safe read.
