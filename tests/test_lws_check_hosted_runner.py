@@ -46,29 +46,29 @@ def test_self_hosted_and_unknown_labels_are_rejected():
 # --- literal runs-on --------------------------------------------------------
 
 def test_literal_hosted_runner_passes(tmp_path):
-    d = _write(tmp_path, "jobs:\n  a:\n    runs-on: ubuntu-latest\n")
+    d = _write(tmp_path, "jobs:\n  build:\n    runs-on: ubuntu-latest\n")
     assert hr.check_all(d) == []
 
 
 def test_literal_self_hosted_runner_fails(tmp_path):
-    d = _write(tmp_path, "jobs:\n  a:\n    runs-on: self-hosted\n")
+    d = _write(tmp_path, "jobs:\n  build:\n    runs-on: self-hosted\n")
     errors = hr.check_all(d)
     assert errors and any("self-hosted" in e for e in errors)
 
 
 def test_runs_on_sequence_with_self_hosted_fails(tmp_path):
-    d = _write(tmp_path, "jobs:\n  a:\n    runs-on: [self-hosted, linux, x64]\n")
+    d = _write(tmp_path, "jobs:\n  build:\n    runs-on: [self-hosted, linux, x64]\n")
     assert hr.check_all(d) != []
 
 
 def test_runs_on_sequence_all_hosted_passes(tmp_path):
-    d = _write(tmp_path, "jobs:\n  a:\n    runs-on: [ubuntu-latest]\n")
+    d = _write(tmp_path, "jobs:\n  build:\n    runs-on: [ubuntu-latest]\n")
     assert hr.check_all(d) == []
 
 
 def test_runner_group_mapping_fails(tmp_path):
     # `runs-on: group:` only ever names a self-hosted runner group.
-    d = _write(tmp_path, "jobs:\n  a:\n    runs-on:\n      group: my-group\n")
+    d = _write(tmp_path, "jobs:\n  build:\n    runs-on:\n      group: my-group\n")
     assert hr.check_all(d) != []
 
 
@@ -77,7 +77,7 @@ def test_runner_group_mapping_fails(tmp_path):
 def test_matrix_expression_resolving_to_hosted_passes(tmp_path):
     d = _write(tmp_path, (
         "jobs:\n"
-        "  a:\n"
+        "  build:\n"
         "    strategy:\n"
         "      matrix:\n"
         "        os: [ubuntu-latest, windows-latest, macos-latest]\n"
@@ -89,7 +89,7 @@ def test_matrix_expression_resolving_to_hosted_passes(tmp_path):
 def test_matrix_expression_with_one_self_hosted_entry_fails(tmp_path):
     d = _write(tmp_path, (
         "jobs:\n"
-        "  a:\n"
+        "  build:\n"
         "    strategy:\n"
         "      matrix:\n"
         "        os: [ubuntu-latest, self-hosted]\n"
@@ -102,7 +102,7 @@ def test_matrix_expression_with_one_self_hosted_entry_fails(tmp_path):
 def test_matrix_block_sequence_form_is_resolved(tmp_path):
     d = _write(tmp_path, (
         "jobs:\n"
-        "  a:\n"
+        "  build:\n"
         "    strategy:\n"
         "      matrix:\n"
         "        os:\n"
@@ -118,7 +118,7 @@ def test_matrix_key_that_does_not_exist_fails_closed(tmp_path):
     # could be anything. Fail, do not skip.
     d = _write(tmp_path, (
         "jobs:\n"
-        "  a:\n"
+        "  build:\n"
         "    strategy:\n"
         "      matrix:\n"
         "        python: ['3.12']\n"
@@ -136,7 +136,7 @@ def test_matrix_include_adding_a_self_hosted_runner_is_caught(tmp_path):
     """
     d = _write(tmp_path, (
         "jobs:\n"
-        "  a:\n"
+        "  build:\n"
         "    strategy:\n"
         "      matrix:\n"
         "        os: [ubuntu-latest]\n"
@@ -152,7 +152,7 @@ def test_matrix_include_adding_a_self_hosted_runner_is_caught(tmp_path):
 def test_matrix_include_with_only_hosted_entries_passes(tmp_path):
     d = _write(tmp_path, (
         "jobs:\n"
-        "  a:\n"
+        "  build:\n"
         "    strategy:\n"
         "      matrix:\n"
         "        os: [ubuntu-latest]\n"
@@ -168,7 +168,7 @@ def test_matrix_key_supplied_only_by_include_is_resolved(tmp_path):
     # No top-level `os` key at all -- the value comes solely from include.
     d = _write(tmp_path, (
         "jobs:\n"
-        "  a:\n"
+        "  build:\n"
         "    strategy:\n"
         "      matrix:\n"
         "        python: ['3.12']\n"
@@ -189,7 +189,7 @@ def test_flow_mapping_include_entry_is_caught(tmp_path):
     """
     d = _write(tmp_path, (
         "jobs:\n"
-        "  a:\n"
+        "  build:\n"
         "    strategy:\n"
         "      matrix:\n"
         "        os: [ubuntu-latest]\n"
@@ -204,7 +204,7 @@ def test_flow_mapping_include_entry_is_caught(tmp_path):
 def test_flow_mapping_include_entry_all_hosted_passes(tmp_path):
     d = _write(tmp_path, (
         "jobs:\n"
-        "  a:\n"
+        "  build:\n"
         "    strategy:\n"
         "      matrix:\n"
         "        os: [ubuntu-latest]\n"
@@ -225,7 +225,7 @@ def test_nested_flow_mapping_fails_closed(tmp_path):
 def test_sequence_item_with_an_empty_key_fails_closed(tmp_path):
     d = _write(tmp_path, (
         "jobs:\n"
-        "  a:\n"
+        "  build:\n"
         "    strategy:\n"
         "      matrix:\n"
         "        os: [ubuntu-latest]\n"
@@ -241,11 +241,11 @@ def test_document_end_marker_followed_by_more_content_is_rejected(tmp_path):
     # `---` left the same two-document merge open under a different spelling.
     d = _write(tmp_path, (
         "jobs:\n"
-        "  a:\n"
+        "  build:\n"
         "    runs-on: self-hosted\n"
         "...\n"
         "jobs:\n"
-        "  b:\n"
+        "  check:\n"
         "    runs-on: ubuntu-latest\n"
     ))
     errors = hr.check_all(d)
@@ -253,7 +253,7 @@ def test_document_end_marker_followed_by_more_content_is_rejected(tmp_path):
 
 
 def test_trailing_document_end_marker_is_allowed(tmp_path):
-    d = _write(tmp_path, "jobs:\n  a:\n    runs-on: ubuntu-latest\n...\n")
+    d = _write(tmp_path, "jobs:\n  build:\n    runs-on: ubuntu-latest\n...\n")
     assert hr.check_all(d) == []
 
 
@@ -266,7 +266,7 @@ def test_dashes_inside_a_block_scalar_are_not_a_document_boundary(tmp_path):
     """
     d = _write(tmp_path, (
         "jobs:\n"
-        "  a:\n"
+        "  build:\n"
         "    runs-on: ubuntu-latest\n"
         "    steps:\n"
         "      - name: print\n"
@@ -295,11 +295,11 @@ def test_multi_document_workflow_is_rejected(tmp_path):
     """
     d = _write(tmp_path, (
         "jobs:\n"
-        "  a:\n"
+        "  build:\n"
         "    runs-on: self-hosted\n"
         "---\n"
         "jobs:\n"
-        "  b:\n"
+        "  check:\n"
         "    runs-on: ubuntu-latest\n"
     ))
     errors = hr.check_all(d)
@@ -307,7 +307,7 @@ def test_multi_document_workflow_is_rejected(tmp_path):
 
 
 def test_single_leading_document_marker_is_allowed(tmp_path):
-    d = _write(tmp_path, "---\njobs:\n  a:\n    runs-on: ubuntu-latest\n")
+    d = _write(tmp_path, "---\njobs:\n  build:\n    runs-on: ubuntu-latest\n")
     assert hr.check_all(d) == []
 
 
@@ -316,7 +316,7 @@ def test_non_matrix_expression_fails_closed(tmp_path):
     # time and cannot be checked statically. Fail-closed is the only safe read.
     for expr in ("${{ env.RUNNER }}", "${{ vars.RUNNER_LABEL }}",
                  "${{ inputs.runner }}", "${{ github.event.inputs.r }}"):
-        d = _write(tmp_path, f"jobs:\n  a:\n    runs-on: {expr}\n", name="e.yml")
+        d = _write(tmp_path, f"jobs:\n  build:\n    runs-on: {expr}\n", name="e.yml")
         assert hr.check_all(d) != [], expr
 
 
@@ -325,18 +325,18 @@ def test_non_matrix_expression_fails_closed(tmp_path):
 def test_job_with_no_runs_on_is_reported(tmp_path):
     # A reusable-workflow call job legitimately has no runs-on, but it has a
     # `uses:` instead; a job with neither is malformed and must not pass silently.
-    d = _write(tmp_path, "jobs:\n  a:\n    steps:\n      - run: echo hi\n")
+    d = _write(tmp_path, "jobs:\n  build:\n    steps:\n      - run: echo hi\n")
     assert hr.check_all(d) != []
 
 
 def test_reusable_workflow_call_job_is_allowed(tmp_path):
-    d = _write(tmp_path, "jobs:\n  a:\n    uses: ./.github/workflows/other.yml\n")
+    d = _write(tmp_path, "jobs:\n  build:\n    uses: ./.github/workflows/other.yml\n")
     assert hr.check_all(d) == []
 
 
 def test_all_workflow_files_in_directory_are_checked(tmp_path):
-    d = _write(tmp_path, "jobs:\n  a:\n    runs-on: ubuntu-latest\n", name="good.yml")
-    (d / "bad.yaml").write_text("jobs:\n  b:\n    runs-on: self-hosted\n", encoding="utf-8")
+    d = _write(tmp_path, "jobs:\n  build:\n    runs-on: ubuntu-latest\n", name="good.yml")
+    (d / "bad.yaml").write_text("jobs:\n  check:\n    runs-on: self-hosted\n", encoding="utf-8")
     errors = hr.check_all(d)
     assert errors and any("bad.yaml" in e for e in errors)
 
