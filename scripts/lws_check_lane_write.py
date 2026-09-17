@@ -40,6 +40,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
@@ -81,14 +82,22 @@ def _extract_paths(agent: str, raw: dict) -> list[str]:
     return []
 
 
-def _relativize(path_str: str) -> str:
-    """Best-effort: turn an absolute path under REPO_ROOT into a repo-relative one."""
+def _relativize(path_str: str) -> Optional[str]:
+    """Repo-relative form of `path_str`, or None when it is not under REPO_ROOT.
+
+    None means "not this repo's business". The lane rules classify paths
+    *within* this repo; a write to a scratch file, a temp directory or another
+    project elsewhere on the machine sits outside them entirely. Returning the
+    absolute path instead would classify it "other" and deny it, turning a
+    repo lane guard into a machine-wide write block for any session that has
+    this repo as its project directory.
+    """
     try:
         p = Path(path_str)
         if p.is_absolute():
             return str(p.resolve().relative_to(REPO_ROOT.resolve())).replace("\\", "/")
     except (OSError, ValueError):
-        pass
+        return None
     return path_str.replace("\\", "/")
 
 
@@ -97,6 +106,8 @@ def evaluate(agent: str, raw: dict) -> dict:
     offenders = []
     for path_str in paths:
         rel = _relativize(path_str)
+        if rel is None:
+            continue  # outside this repo -- see _relativize
         cls = classify_path(rel)
         if cls not in (agent, "shared"):
             offenders.append(rel)

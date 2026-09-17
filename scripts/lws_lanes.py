@@ -13,7 +13,8 @@ Lane membership (literal, per the D1b brief):
   - codex lane: `plugins/codex/`, `adapters/codex/`, any directory literally
     named `codex` under `tests/`.
   - shared: `core/`, `scripts/`, `.github/`, `docs/`, `proof/`, `reviews/`,
-    `HANDOFF.md`, `AGENTS.md`, `CLAUDE.md`, `README.md`.
+    `HANDOFF.md`, `AGENTS.md`, `CLAUDE.md`, `README.md`, plus (see below)
+    every file at the repo root and every `tests/` path in neither lane.
 
 One extension beyond the literal glob, documented here rather than left
 implicit: a test module directly named `test_claude_*` or `*_claude_*`
@@ -23,6 +24,23 @@ repo already has `tests/adapters/test_claude_hook_io.py` and
 `tests/adapters/test_codex_hook_io.py` sitting directly under `tests/adapters/`,
 not under a `claude/`/`codex/` subdirectory, and the literal glob alone
 would strand them in neither lane nor the shared list.
+
+Two further paths classify as shared, both evaluated *after* the lane rules
+above so a lane fixture still wins its lane:
+
+  - Every file at the repo root (`.gitignore`, `pyproject.toml`,
+    `CHANGELOG.md`, `LICENSE`, ...). `CLAUDE.md` and `AGENTS.md` already
+    describe "root config" as shared; the literal `SHARED_FILES` tuple named
+    only four of them, so a commit touching `.gitignore` classified "other"
+    and was rejected for *both* agents — a path no one could ever change.
+  - Every remaining `tests/` path (`tests/conftest.py`,
+    `tests/test_lws_check_env_leak.py`, ...). A test naming neither CLI
+    exercises shared code; changing a shared script and its own test in one
+    commit has to be possible.
+
+"other" remains a deliberate fail-closed default for anything outside all of
+the above — notably `examples/`, still unclassified pending an owner ruling
+on who owns it.
 
 Bootstrap exception: lane enforcement (this module's `check_lanes`, wired
 into the `lws-lanes` CI job) is a no-op for PR numbers 1-5 — the PR that
@@ -80,6 +98,18 @@ def classify_path(path: str) -> str:
             filename.startswith(f"test_{agent}_") or f"_{agent}_" in filename
         ):
             return agent
+
+    # Evaluated only after the lane rules above, so a lane fixture or a
+    # test_claude_*/test_codex_* module still wins its lane.
+    if "/" not in posix:
+        # A file at the repo root -- build config, ignore rules, the changelog,
+        # the licence -- is repo-wide by construction and belongs to no single
+        # CLI. SHARED_FILES above is now a subset of this, kept because it is
+        # directive 5's own explicit list.
+        return "shared"
+    if posix.startswith("tests/"):
+        # A test naming neither CLI exercises shared code, so it is shared.
+        return "shared"
 
     return "other"
 

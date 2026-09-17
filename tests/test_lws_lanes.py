@@ -41,6 +41,33 @@ def test_classify_named_test_module_extension():
     assert lws_lanes.classify_path("tests/adapters/test_codex_hook_io.py") == "codex"
 
 
+def test_classify_repo_root_files_are_shared():
+    # No file at the repo root belongs to one CLI's lane: build config, ignore
+    # rules, the changelog and the licence are repo-wide by construction.
+    # CLAUDE.md and AGENTS.md already call "root config" shared; before this,
+    # classify_path did not, so no agent could touch .gitignore at all.
+    for path in (".gitignore", "pyproject.toml", "CHANGELOG.md", "LICENSE",
+                 ".editorconfig", "SECURITY.md"):
+        assert lws_lanes.classify_path(path) == "shared", path
+
+
+def test_classify_generic_test_modules_are_shared():
+    # A test naming neither CLI exercises shared code, so it is shared -- not
+    # "other", which no agent may touch at all. Changing a shared script and
+    # its own test in one commit has to be possible.
+    for path in ("tests/test_lws_check_env_leak.py", "tests/core/test_lws_handoff.py",
+                 "tests/conftest.py", "tests/conformance/test_policy_shape.py"):
+        assert lws_lanes.classify_path(path) == "shared", path
+
+
+def test_classify_lane_tests_win_over_shared_tests():
+    # Precedence guard: the lane rules for tests/ are evaluated before the
+    # shared-tests fallback. Reverse them and every lane fixture silently
+    # becomes shared, firing the cross-CLI review gate on lane-only work.
+    assert lws_lanes.classify_path("tests/adapters/fixtures/claude/pretooluse_read.json") == "claude"
+    assert lws_lanes.classify_path("tests/adapters/test_codex_hook_io.py") == "codex"
+
+
 def test_classify_other_for_unrelated_path():
     assert lws_lanes.classify_path("examples/policies/example-routing.json") == "other"
 

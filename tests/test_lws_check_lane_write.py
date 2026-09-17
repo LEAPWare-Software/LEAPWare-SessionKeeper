@@ -54,6 +54,25 @@ def test_unparseable_event_fails_open():
     assert out["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
+def test_write_outside_the_repo_is_allowed(tmp_path):
+    # The lane rules classify paths *within* this repo. A scratch file or
+    # another project elsewhere on the machine is outside them entirely;
+    # denying it would make a repo lane guard a machine-wide write block for
+    # any session that has this repo as its project directory.
+    outside = tmp_path / "notes.md"
+    out = evaluate("claude", {"hook_event_name": "PreToolUse", "tool_name": "Write",
+                              "tool_input": {"file_path": str(outside)}})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+
+def test_absolute_path_inside_the_repo_is_still_classified():
+    # The out-of-repo allowance must not swallow absolute in-repo paths.
+    inside = REPO_ROOT / "plugins" / "codex" / "lws" / "bin" / "lws_hook.py"
+    out = evaluate("claude", {"hook_event_name": "PreToolUse", "tool_name": "Write",
+                              "tool_input": {"file_path": str(inside)}})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 def test_non_edit_tool_is_ignored():
     out = evaluate("claude", {"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "plugins/codex/lws/bin/lws_hook.py"}})
     assert out["hookSpecificOutput"]["permissionDecision"] == "allow"
