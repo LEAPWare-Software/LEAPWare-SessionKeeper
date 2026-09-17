@@ -1,0 +1,19 @@
+{
+  "name": "lws",
+  "version": "0.2.0+codex",
+  "description": "Companion to the LEAPWare SessionKeeper Claude Code plugin, now with the same enforcement: an engine identical to it, an enforcing PreToolUse hook (hooks/hooks.json), and lws-config/lws-report skills.",
+  "author": {
+    "name": "LEAPWare-Software"
+  },
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "LEAPWare SessionKeeper",
+    "shortDescription": "Token-policy enforcement for this session.",
+    "longDescription": "lws makes an AI coding session's spend rules mechanical. Both the Claude Code and Codex plugins enforce via a PreToolUse hook backed by the same lws_core policy engine, with lws-config and lws-report skills for inspecting and previewing policy.",
+    "developerName": "LEAPWare-Software",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "lws: show the current token policy and report on the last action."
+  }
+}

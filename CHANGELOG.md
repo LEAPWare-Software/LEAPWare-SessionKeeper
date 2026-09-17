@@ -8,13 +8,16 @@ follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Initial scaffold: `lwr_core` pure engine (`Event` -> `Decision`), the
-  `budget_line` walking-skeleton rule, the Claude Code adapter and plugin
-  (enforcing `PreToolUse` hook), the Codex adapter and plugin
-  (enforcing `PreToolUse` hook — see `docs/install-codex.md`),
-  `scripts/lwr_build.py` (vendoring), both plugin validators, and the unit
-  / adapter / conformance test suite.
-- Codex plugin hook: `plugins/codex/lwr/hooks/hooks.json` +
-  `bin/lwr_hook.py`, `adapters/codex/hook_io.render_decision`, superseding
+- Initial scaffold: `lws_core` pure engine (`Event` -> `Decision`), the
+  `lws_version` walking-skeleton rule (a safe no-op: allows every event,
+  reports the plugin version, never denies — CTO decision 2026-09-17;
+  replaces an earlier `budget_line` rule copied from LWH, which would
+  have double-enforced next to LWH and isn't a runway rule), the Claude
+  Code adapter and plugin (enforcing `PreToolUse` hook), the Codex
+  adapter and plugin (enforcing `PreToolUse` hook — see
+  `docs/install-codex.md`), `scripts/lws_build.py` (vendoring), both
+  plugin validators, and the unit / adapter / conformance test suite.
+- Codex plugin hook: `plugins/codex/lws/hooks/hooks.json` +
+  `bin/lws_hook.py`, `adapters/codex/hook_io.render_decision`, superseding
   the earlier reporting-only decision now that the plugin-bundled-hooks
   manifest shape is confirmed documented (`docs/install-codex.md`).

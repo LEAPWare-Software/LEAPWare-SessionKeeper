@@ -1,0 +1,9 @@
+{
+  "$schema": "./schema.json",
+  "rules": {
+    "lws_version": {
+      "mode": "warn",
+      "options": {}
+    }
+  }
+}

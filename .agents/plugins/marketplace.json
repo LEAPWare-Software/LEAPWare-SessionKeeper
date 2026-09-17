@@ -1,0 +1,20 @@
+{
+  "name": "LEAPWare-SessionKeeper",
+  "interface": {
+    "displayName": "LEAPWare SessionKeeper"
+  },
+  "plugins": [
+    {
+      "name": "lws",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex/lws"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

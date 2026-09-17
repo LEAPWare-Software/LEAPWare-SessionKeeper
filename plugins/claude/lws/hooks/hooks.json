@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/lws_hook.py\" || python \"${CLAUDE_PLUGIN_ROOT}/bin/lws_hook.py\"",
+            "timeout": 10,
+            "statusMessage": "lws: checking dispatch against token policy"
+          }
+        ]
+      }
+    ]
+  }
+}
