@@ -100,6 +100,76 @@ def test_case_differing_absolute_path_into_the_other_lane_is_denied():
     assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+def _unc_alias_of(path: Path) -> str:
+    """The `\\\\localhost\\C$\\...` spelling of a local absolute path."""
+    s = str(path)
+    return "\\\\localhost\\" + s[0] + "$" + s[2:]
+
+
+def _unc_admin_share_available() -> bool:
+    if os.name != "nt":
+        return False
+    try:
+        os.stat(_unc_alias_of(REPO_ROOT.resolve()))
+        return True
+    except OSError:
+        return False
+
+
+def test_forward_slash_extended_prefix_into_the_other_lane_is_denied():
+    """`//?/C:/...` is the extended-length form spelled with slashes.
+
+    Windows' path resolution accepts it and hands back `\\\\?\\C:\\...`, so
+    matching only the literal backslash spelling left the identical evasion
+    open one keystroke away.
+    """
+    inside = REPO_ROOT.resolve() / "plugins" / "codex" / "lws" / "bin" / "lws_hook.py"
+    spelled = "//?/" + str(inside).replace("\\", "/")
+    out = evaluate("claude", {"tool_name": "Write", "tool_input": {"file_path": spelled}})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+@pytest.mark.skipif(not _unc_admin_share_available(),
+                    reason="no reachable \\\\localhost\\C$ admin share on this host")
+def test_unc_alias_of_the_repo_into_the_other_lane_is_denied():
+    # `\\localhost\C$\...` addresses the identical file as `C:\...` but is
+    # lexically unrelated to it, so relative_to() reports "not a subpath" and
+    # the path can only be recognised by filesystem identity.
+    inside = REPO_ROOT.resolve() / "plugins" / "codex" / "lws" / "bin" / "lws_hook.py"
+    out = evaluate("claude", {"tool_name": "Write",
+                              "tool_input": {"file_path": _unc_alias_of(inside)}})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_identity_fallback_maps_an_alias_back_to_a_repo_relative_path(tmp_path):
+    # The fallback has to rebuild the tail, not merely answer yes/no, and it
+    # has to work for a file that does not exist yet -- a Write creating a new
+    # file is the normal case.
+    from lws_check_lane_write import _repo_relative_by_identity
+
+    inside = REPO_ROOT.resolve() / "plugins" / "codex" / "not_created_yet.py"
+    assert _repo_relative_by_identity(inside) == "plugins/codex/not_created_yet.py"
+    assert _repo_relative_by_identity(tmp_path / "elsewhere.txt") is None
+
+
+def test_write_inside_a_linked_worktree_is_classified_by_its_inner_path():
+    """`.worktrees/<branch>/` is a checkout of this repo, not source in it.
+
+    Directive 19 puts every worktree exactly there, and CLAUDE.md requires it.
+    Classifying `.worktrees/x/tests/foo.py` by its literal path makes it
+    "other", so the guard denies every write in a worktree -- including the
+    ones needed to fix the guard. It must classify by the path *within* the
+    worktree instead.
+    """
+    inner = REPO_ROOT.resolve() / ".worktrees" / "some-branch" / "tests" / "test_x.py"
+    out = evaluate("claude", {"tool_name": "Write", "tool_input": {"file_path": str(inner)}})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+    other_lane = REPO_ROOT.resolve() / ".worktrees" / "some-branch" / "plugins" / "codex" / "x.py"
+    out = evaluate("claude", {"tool_name": "Write", "tool_input": {"file_path": str(other_lane)}})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 def test_unresolvable_path_fails_closed():
     # None from _relativize means "known to be outside the repo". A path the
     # OS refuses to resolve is not known to be anything, so it must deny.

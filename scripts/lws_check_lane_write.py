@@ -20,6 +20,17 @@ Reads one JSON event from stdin:
     `*** (Add|Update|Delete) File: <path>` header lines, the apply_patch
     patch format's documented way of naming the file(s) a patch touches.
 
+What this hook is NOT. It sees only the editing tools listed above, because
+that is all its matcher subscribes to. A write performed through a shell --
+`python -c "open(...)"`, a redirect, a patch piped into `git apply` -- never
+reaches it at all. So it is a same-session nudge and must not be read as a
+security boundary: it catches the mistake, not the determined evader. The
+`lws-lanes` CI check is the enforcement of record, and it works on what was
+actually committed, which no spelling of a path can disguise. Two adversarial
+reviews of this file found path-aliasing evasions (`\\\\?\\`, `//?/`, UNC
+admin shares) and all are closed below, but the shell-shaped hole is
+structural and stays open by design.
+
 If no file path can be determined from the event shape, this hook does
 NOT deny — silently allowing an edit it can't parse is the safe failure
 direction for a same-session nudge that is not itself the enforcement of
@@ -82,23 +93,80 @@ def _extract_paths(agent: str, raw: dict) -> list[str]:
     return []
 
 
-_EXTENDED_UNC_PREFIX = "\\\\?\\UNC\\"  # \\?\UNC\server\share\... -> \\server\share\...
-_EXTENDED_PREFIX = "\\\\?\\"  # \\?\C:\... -> C:\...
+WORKTREE_DIR = ".worktrees"
+_MAX_ANCESTOR_WALK = 64
 
 
 def _strip_extended_prefix(path_str: str) -> str:
-    """Drop a Windows extended-length (`\\\\?\\`) prefix.
+    """Drop a Windows extended-length prefix, however it is spelled.
 
     `Path.resolve()` preserves this prefix, so a path that is genuinely inside
     the repo still fails `relative_to(REPO_ROOT)` with it attached. Normalising
-    it away before the comparison is what stops `\\\\?\\<repo>\\plugins\\codex\\x.py`
-    from reading as "somewhere else entirely".
+    it away is what stops `\\\\?\\<repo>\\plugins\\codex\\x.py` from reading as
+    "somewhere else entirely".
+
+    Both separator spellings count. Windows accepts `//?/C:/...` as the same
+    extended-length form and resolves it straight back to `\\\\?\\C:\\...`, so
+    matching only the literal backslashes leaves the identical evasion open
+    one keystroke away.
     """
-    if path_str.startswith(_EXTENDED_UNC_PREFIX):
-        return "\\\\" + path_str[len(_EXTENDED_UNC_PREFIX):]
-    if path_str.startswith(_EXTENDED_PREFIX):
-        return path_str[len(_EXTENDED_PREFIX):]
-    return path_str
+    head = path_str[:8].replace("/", "\\")
+    if not head.startswith("\\\\?\\"):
+        return path_str
+    rest = path_str[4:]
+    if rest[:4].replace("/", "\\").upper() == "UNC\\":
+        return "\\\\" + rest[4:]
+    return rest
+
+
+def _repo_relative_by_identity(target: Path) -> Optional[str]:
+    """Repo-relative form of `target` found by filesystem identity, or None.
+
+    A lexical comparison cannot see through path aliasing: `\\\\host\\C$\\...`,
+    a `subst`ed drive and a junction all name the same file as `C:\\...` while
+    sharing no common prefix with it. Walking up from the target to the first
+    ancestor whose (st_dev, st_ino) matches the repo root answers the question
+    the string comparison cannot.
+
+    The target itself usually does not exist -- a Write creating a new file is
+    the normal case -- so a failed stat keeps walking rather than giving up.
+    """
+    try:
+        root_stat = REPO_ROOT.resolve().stat()
+    except OSError:
+        return None
+    root_key = (root_stat.st_dev, root_stat.st_ino)
+
+    tail: list[str] = []
+    current = target
+    for _ in range(_MAX_ANCESTOR_WALK):
+        try:
+            st = current.stat()
+        except (OSError, ValueError):
+            st = None
+        if st is not None and (st.st_dev, st.st_ino) == root_key:
+            return "/".join(reversed(tail))
+        parent = current.parent
+        if parent == current:
+            return None
+        tail.append(current.name)
+        current = parent
+    return None
+
+
+def _strip_worktree_prefix(rel: str) -> str:
+    """Map `.worktrees/<branch>/<path>` to `<path>`.
+
+    A linked worktree is another checkout of this repo, not source sitting in
+    it. Directive 19 and CLAUDE.md put every worktree exactly under
+    `.worktrees/<branch>`, so classifying by the literal path makes every file
+    in a worktree "other" -- and the guard then denies every edit made in one,
+    including the edits needed to fix the guard.
+    """
+    parts = rel.split("/")
+    if len(parts) > 2 and parts[0] == WORKTREE_DIR:
+        return "/".join(parts[2:])
+    return rel
 
 
 def _relativize(path_str: str) -> Optional[str]:
@@ -112,14 +180,15 @@ def _relativize(path_str: str) -> Optional[str]:
 
     None must never mean "could not tell". A path this function cannot resolve
     is handed back as-is, which classifies "other" and denies: an unreadable
-    path is not evidence of innocence. Only a clean resolution that lands
-    outside REPO_ROOT earns the None.
+    path is not evidence of innocence. None is earned only by a clean
+    resolution that lands outside the repo both lexically AND by filesystem
+    identity.
     """
     candidate = _strip_extended_prefix(path_str)
     try:
         p = Path(candidate)
         if not p.is_absolute():
-            return candidate.replace("\\", "/")
+            return _strip_worktree_prefix(candidate.replace("\\", "/"))
         resolved = p.resolve()
         root = REPO_ROOT.resolve()
     except (OSError, ValueError):
@@ -128,9 +197,13 @@ def _relativize(path_str: str) -> Optional[str]:
     try:
         # PurePath.relative_to is case-insensitive on Windows, which is what
         # makes a differently-cased in-repo path still compare as in-repo.
-        return str(resolved.relative_to(root)).replace("\\", "/")
+        rel = str(resolved.relative_to(root)).replace("\\", "/")
     except ValueError:
-        return None  # resolved cleanly, genuinely outside the repo
+        rel = _repo_relative_by_identity(resolved)
+        if rel is None:
+            return None  # outside lexically and by identity: genuinely elsewhere
+
+    return _strip_worktree_prefix(rel)
 
 
 def evaluate(agent: str, raw: dict) -> dict:
