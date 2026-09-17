@@ -74,11 +74,24 @@ def test_absolute_path_fails(needle):
     assert any("absolute path" in e for e in errors)
 
 
-@pytest.mark.parametrize("needle", ["manny", "Ramos", "FOLLOWOZ", "leapware-cpt", "leapware-financial"])
+@pytest.mark.parametrize("needle", ["example-private-project", "Example-Private-Project"])
 def test_forbidden_substring_fails(needle):
     text = _valid_text() + f"\n{needle}\n"
     errors = lws_handoff._validate(text)
     assert any("forbidden substring" in e for e in errors)
+
+
+def test_forbidden_substrings_default_only_when_file_absent(tmp_path, monkeypatch):
+    monkeypatch.setattr(lws_handoff, "REPO_ROOT", tmp_path)
+    assert lws_handoff._forbidden_substrings() == lws_handoff.DEFAULT_FORBIDDEN_SUBSTRINGS
+
+
+def test_forbidden_substring_from_local_file_fails(tmp_path, monkeypatch):
+    (tmp_path / lws_handoff.PRIVATE_NAMES_FILE).write_text("AdoptersSecretProject\n", encoding="utf-8")
+    monkeypatch.setattr(lws_handoff, "REPO_ROOT", tmp_path)
+    text = _valid_text() + "\nAdoptersSecretProject\n"
+    errors = lws_handoff._validate(text)
+    assert any("forbidden substring" in e and "adopterssecretproject" in e for e in errors)
 
 
 def test_cmd_check_missing_file(tmp_path, monkeypatch, capsys):
