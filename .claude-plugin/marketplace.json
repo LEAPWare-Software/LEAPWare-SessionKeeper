@@ -1,0 +1,25 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "leapware-runway",
+  "description": "LEAPWare's own single-plugin marketplace. Hosts lwr, a token-policy layer that makes an AI coding session's spend rules mechanical.",
+  "owner": {
+    "name": "LEAPWare-Software",
+    "url": "https://github.com/LEAPWare-Software"
+  },
+  "plugins": [
+    {
+      "name": "lwr",
+      "description": "A token-policy layer that makes an AI coding session's spend rules mechanical. Ships one walking-skeleton rule, budget_line, gating subagent dispatch on a stated token budget. Policy is per-rule off/warn/deny and fails open. See plugins/claude/lwr/.claude-plugin/plugin.json for the full description.",
+      "version": "0.1.0",
+      "author": {
+        "name": "LEAPWare-Software",
+        "url": "https://github.com/LEAPWare-Software"
+      },
+      "homepage": "https://github.com/LEAPWare-Software/LEAPWare-Runway",
+      "license": "Apache-2.0",
+      "category": "workflow",
+      "keywords": ["governance", "hooks", "policy", "budget"],
+      "source": "./plugins/claude/lwr"
+    }
+  ]
+}

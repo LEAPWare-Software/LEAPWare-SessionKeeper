@@ -1,0 +1,45 @@
+name: Bug report
+description: Something in runway behaves differently than documented.
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - core (lwr_core engine / rules)
+        - adapters/claude
+        - adapters/codex
+        - plugins/claude/lwr
+        - plugins/codex/lwr
+        - scripts (build/validate/release)
+        - docs
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did runway do, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Policy file used (or "default"), the exact event/prompt, and the command or hook invocation.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: runway version
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host and OS
+      description: e.g. "Claude Code on Windows 11" or "Codex CLI on macOS"
+    validations:
+      required: true

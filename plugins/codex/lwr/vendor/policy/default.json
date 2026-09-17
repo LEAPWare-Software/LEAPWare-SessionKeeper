@@ -1,0 +1,9 @@
+{
+  "$schema": "./schema.json",
+  "rules": {
+    "budget_line": {
+      "mode": "deny",
+      "options": {}
+    }
+  }
+}

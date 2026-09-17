@@ -1,0 +1,20 @@
+{
+  "name": "LEAPWare-Runway",
+  "interface": {
+    "displayName": "LEAPWare Runway"
+  },
+  "plugins": [
+    {
+      "name": "lwr",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex/lwr"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

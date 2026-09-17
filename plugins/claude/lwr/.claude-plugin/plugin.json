@@ -1,0 +1,17 @@
+{
+  "name": "lwr",
+  "version": "0.1.0",
+  "description": "A token-policy layer that makes an AI coding session's spend rules mechanical. Ships one walking-skeleton rule, budget_line: PreToolUse on the Agent tool is denied unless the dispatch prompt carries a line matching '^BUDGET:\\s*\\d+k'. Policy is per-rule off/warn/deny, fails open (a missing or broken policy file never blocks a dispatch), and the engine is pure — see core/lwr_core/engine.py.",
+  "author": {
+    "name": "LEAPWare-Software",
+    "url": "https://github.com/LEAPWare-Software"
+  },
+  "homepage": "https://github.com/LEAPWare-Software/LEAPWare-Runway",
+  "license": "Apache-2.0",
+  "keywords": [
+    "governance",
+    "hooks",
+    "policy",
+    "budget"
+  ]
+}
