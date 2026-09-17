@@ -107,15 +107,42 @@ def _strip_comment(line: str) -> str:
     return "".join(out).rstrip()
 
 
-class MultiDocumentError(ValueError):
+class WorkflowParseError(ValueError):
+    """Raised when this reader will not vouch for what a file means."""
+
+
+class MultiDocumentError(WorkflowParseError):
     """Raised for a workflow file holding more than one YAML document."""
+
+
+class DuplicateKeyError(WorkflowParseError):
+    """Raised when a mapping repeats a key.
+
+    A repeated key is invalid YAML, and in a line-based reader it silently
+    overwrites: two `jobs:` mappings merge and the later one wins, taking
+    whatever runners the earlier one declared with it. Refusing closes that
+    class however the repetition arose -- an indented `---` that is neither a
+    document marker nor a key, a hand-merged file, a bad template.
+    """
 
 
 _BLOCK_SCALAR_RE = re.compile(r"^[^:]+:\s*[|>][-+0-9]*\s*$")
 
-# A YAML key cannot carry a bare flow delimiter. Seeing one means the line was
-# split in the wrong place, so whatever came out of the split is fiction.
-_IMPOSSIBLE_KEY_RE = re.compile(r"[\[\]{}]")
+# The ONLY sequence-item head shape this reader claims to understand: a plain
+# or quoted identifier key, a colon, then the value. An allowlist, not a
+# blocklist of disqualifying characters -- a head may legally carry an anchor
+# (`&x`), an alias (`*x`), a tag (`!!str`) or a flow opener before the key, and
+# enumerating those one at a time is how each round of review found one more.
+# Anything that does not match is beyond this reader and fails closed.
+_SEQ_ITEM_HEAD_RE = re.compile(
+    r"""^
+        (?P<key>"[A-Za-z_][A-Za-z0-9_.\-]*"
+               |'[A-Za-z_][A-Za-z0-9_.\-]*'
+               |[A-Za-z_][A-Za-z0-9_.\-]*)
+        \s*:\s*
+        (?P<value>.*)$""",
+    re.VERBOSE | re.DOTALL,
+)
 
 
 def _significant_lines(text: str) -> list[tuple[int, str]]:
@@ -246,14 +273,12 @@ def _parse_block(rows: list[tuple[int, str]], start: int, indent: int) -> tuple[
                 # would mis-split the line. Fail closed.
                 items.append(None)
             elif head and ":" in head:
-                key, _, rest = head.partition(":")
-                name = _scalar(key)
-                if not name or _IMPOSSIBLE_KEY_RE.search(name):
-                    # A key carrying a flow delimiter is proof the line was
-                    # mis-split, whatever the spelling that produced it. This
-                    # closes the class rather than one more instance of it.
+                match = _SEQ_ITEM_HEAD_RE.match(head)
+                if match is None:
                     items.append(None)  # malformed -> the caller fails closed
                     continue
+                name = _scalar(match.group("key"))
+                rest = match.group("value")
                 entry: dict = {name: _scalar(rest) if rest.strip() else ""}
                 if nested:
                     more, _ = _parse_block(nested, 0, nested[0][0])
@@ -286,6 +311,8 @@ def _parse_block(rows: list[tuple[int, str]], start: int, indent: int) -> tuple[
         key = _scalar(key)
         rest = rest.strip()
         i += 1
+        if key in mapping:
+            raise DuplicateKeyError(f"mapping repeats the key {key!r}")
 
         if rest.startswith("|") or rest.startswith(">"):
             # Opaque block scalar: swallow every deeper line untouched.
@@ -424,7 +451,7 @@ def check_workflow(path: Path) -> list[str]:
         data = parse_workflow(path.read_text(encoding="utf-8"))
     except OSError as exc:
         return [f"{where}: could not be read: {exc}"]
-    except MultiDocumentError as exc:
+    except WorkflowParseError as exc:
         return [f"{where}: {exc}"]
 
     jobs = data.get("jobs")

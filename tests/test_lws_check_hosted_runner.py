@@ -276,6 +276,64 @@ def test_a_key_that_could_not_be_a_real_yaml_key_fails_closed(tmp_path):
     assert hr.check_all(d) != []
 
 
+def _include_item(item: str) -> str:
+    return (
+        "jobs:\n"
+        "  build:\n"
+        "    strategy:\n"
+        "      matrix:\n"
+        "        os: [ubuntu-latest]\n"
+        "        include:\n"
+        f"          - {item}\n"
+        "    runs-on: ${{ matrix.os }}\n"
+    )
+
+
+def test_anchor_prefixed_sequence_item_fails_closed(tmp_path):
+    """`- &x os: self-hosted` yields the key '&x os' -- no bracket in sight.
+
+    A blocklist of disqualifying characters catches the spellings someone
+    thought of. A sequence item head may carry an anchor, a tag, or a flow
+    opener before the key, so the reader must accept only the key grammar it
+    actually supports and refuse everything else by construction.
+    """
+    assert hr.check_all(_write(tmp_path, _include_item("&x os: self-hosted"))) != []
+
+
+def test_tag_prefixed_sequence_item_fails_closed(tmp_path):
+    assert hr.check_all(_write(tmp_path, _include_item("!!str os: self-hosted"))) != []
+
+
+def test_alias_prefixed_sequence_item_fails_closed(tmp_path):
+    assert hr.check_all(_write(tmp_path, _include_item("*anchor"))) != []
+
+
+def test_quoted_key_sequence_item_is_still_read(tmp_path):
+    # The allowlist must not reject an ordinary quoted key.
+    assert hr.check_all(_write(tmp_path, _include_item('"os": self-hosted'))) != []
+    assert hr.check_all(_write(tmp_path, _include_item('"os": macos-14'))) == []
+
+
+def test_duplicate_top_level_key_fails_closed(tmp_path):
+    """Two `jobs:` mappings must never silently merge.
+
+    An indented `---` is not a document marker and is not a key either, so it
+    is skipped -- and the second `jobs:` then overwrote the first, taking a
+    self-hosted runner with it. Refusing a repeated key closes that whole
+    class, whatever caused the repetition.
+    """
+    d = _write(tmp_path, (
+        "jobs:\n"
+        "  build:\n"
+        "    runs-on: self-hosted\n"
+        "  ---\n"
+        "jobs:\n"
+        "  build:\n"
+        "    runs-on: ubuntu-latest\n"
+    ))
+    assert hr.check_all(d) != []
+
+
 def test_indented_ellipsis_is_not_a_document_marker(tmp_path):
     """YAML document markers live at column 0.
 
