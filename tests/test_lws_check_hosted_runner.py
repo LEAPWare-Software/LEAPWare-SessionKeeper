@@ -334,6 +334,28 @@ def test_duplicate_top_level_key_fails_closed(tmp_path):
     assert hr.check_all(d) != []
 
 
+def test_sequence_item_repeating_its_own_key_fails_closed(tmp_path):
+    """The dash line's key and its nested keys merge with a plain update().
+
+    That merge never reached the duplicate-key guard, so `os` written twice in
+    one include entry resolved last-value-wins and the self-hosted one
+    vanished without an error. The guard is supposed to close that class
+    however the repetition arose.
+    """
+    d = _write(tmp_path, (
+        "jobs:\n"
+        "  build:\n"
+        "    strategy:\n"
+        "      matrix:\n"
+        "        os: [ubuntu-latest]\n"
+        "        include:\n"
+        "          - os: self-hosted\n"
+        "            os: ubuntu-latest\n"
+        "    runs-on: ${{ matrix.os }}\n"
+    ))
+    assert hr.check_all(d) != []
+
+
 def test_indented_ellipsis_is_not_a_document_marker(tmp_path):
     """YAML document markers live at column 0.
 

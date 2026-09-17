@@ -283,6 +283,15 @@ def _parse_block(rows: list[tuple[int, str]], start: int, indent: int) -> tuple[
                 if nested:
                     more, _ = _parse_block(nested, 0, nested[0][0])
                     if isinstance(more, dict):
+                        # Through the same guard the mapping loop uses. A plain
+                        # update() here silently resolved `- os: self-hosted`
+                        # followed by a nested `os:` as last-value-wins, losing
+                        # the self-hosted one without an error.
+                        clash = set(entry) & set(more)
+                        if clash:
+                            raise DuplicateKeyError(
+                                f"sequence item repeats the key {sorted(clash)[0]!r}"
+                            )
                         entry.update(more)
                 items.append(entry)
             elif head:
