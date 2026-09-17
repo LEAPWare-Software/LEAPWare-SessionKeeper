@@ -1,0 +1,16 @@
+[project]
+name = "leapware-runway"
+version = "0.1.0"
+description = "A token-policy plugin that makes an AI coding session's spend rules mechanical."
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+# Runtime dependency policy: NONE. lwr_core and every adapter are Python
+# 3.10+ standard library only. pytest below is a dev-only dependency for
+# running tests; it is never imported by core/, adapters/, or a shipped
+# plugin's bin/ script.
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
