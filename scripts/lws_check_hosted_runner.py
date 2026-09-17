@@ -46,7 +46,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -111,32 +111,87 @@ class MultiDocumentError(ValueError):
     """Raised for a workflow file holding more than one YAML document."""
 
 
+_BLOCK_SCALAR_RE = re.compile(r"^[^:]+:\s*[|>][-+0-9]*\s*$")
+
+
 def _significant_lines(text: str) -> list[tuple[int, str]]:
     """(indent, content) for each line that carries structure.
 
-    A second `---` document marker raises: this reader has no concept of
-    documents, so two `jobs:` mappings would merge and the later one would
-    overwrite the earlier, hiding whatever runners the first one declared.
-    Refusing is the only honest answer.
+    A second document raises. This reader has no concept of documents, so two
+    `jobs:` mappings would merge and the later would overwrite the earlier,
+    hiding whatever runners the first one declared. Both markers count: `---`
+    starts a document and `...` ends one, and checking only for `---` left the
+    same merge open under the other spelling. A trailing `...` with nothing
+    after it is fine -- that is just a document ending.
+
+    Block-scalar content is skipped rather than scanned. A shell script inside
+    `run: |` may legitimately contain a `---` line (a heredoc separator), and
+    treating that as a document boundary rejects a perfectly ordinary
+    single-document workflow.
     """
     rows: list[tuple[int, str]] = []
-    seen_content = False
+    doc_ended = False
+    block_indent: Optional[int] = None
+
     for raw in text.splitlines():
+        if not raw.strip():
+            continue  # a blank line never closes a block scalar
+
+        indent = len(raw) - len(raw.lstrip())
+        if block_indent is not None:
+            if indent > block_indent:
+                continue  # inside a block scalar: content, not structure
+            block_indent = None
+
         if raw.lstrip().startswith("#"):
             continue
         stripped = _strip_comment(raw)
-        if not stripped.strip():
-            continue
         content = stripped.strip()
+        if not content:
+            continue
+
+        if content == "...":
+            doc_ended = True
+            continue
         if content == "---" or content.startswith("--- "):
-            if seen_content or rows:
+            if rows or doc_ended:
                 raise MultiDocumentError(
                     "multi-document YAML is not supported by this check"
                 )
-            seen_content = True
             continue
-        rows.append((len(stripped) - len(stripped.lstrip()), content))
+        if doc_ended:
+            raise MultiDocumentError(
+                "multi-document YAML is not supported by this check"
+            )
+
+        rows.append((indent, content))
+        if _BLOCK_SCALAR_RE.match(content):
+            block_indent = indent
+
     return rows
+
+
+def _flow_mapping(value: str) -> Optional[dict]:
+    """`{a: 1, b: 2}` as a dict, or None when it is beyond this reader.
+
+    None is the fail-closed answer and the caller must treat it as an error.
+    Splitting such an item on its first colon instead produces a plausible
+    but wrong mapping -- `{os: self-hosted}` becomes the key `'{os'` -- whose
+    real key then never matches, dropping a self-hosted runner in silence.
+    """
+    inner = value[1:-1].strip()
+    if "{" in inner or "[" in inner:
+        return None  # nested flow structures are not supported
+    out: dict = {}
+    if not inner:
+        return out
+    for part in inner.split(","):
+        key, sep, val = part.partition(":")
+        key = _scalar(key)
+        if not sep or not key:
+            return None
+        out[key] = _scalar(val)
+    return out
 
 
 def _flow_sequence(value: str) -> list[str]:
@@ -176,9 +231,15 @@ def _parse_block(rows: list[tuple[int, str]], start: int, indent: int) -> tuple[
                 i += 1
             nested = rows[nested_start:i]
 
-            if head and ":" in head and not head.startswith("["):
+            if head.startswith("{") and head.endswith("}"):
+                items.append(_flow_mapping(head))
+            elif head and ":" in head and not head.startswith("["):
                 key, _, rest = head.partition(":")
-                entry: dict = {_scalar(key): _scalar(rest) if rest.strip() else ""}
+                name = _scalar(key)
+                if not name:
+                    items.append(None)  # malformed -> the caller fails closed
+                    continue
+                entry: dict = {name: _scalar(rest) if rest.strip() else ""}
                 if nested:
                     more, _ = _parse_block(nested, 0, nested[0][0])
                     if isinstance(more, dict):
@@ -216,6 +277,8 @@ def _parse_block(rows: list[tuple[int, str]], start: int, indent: int) -> tuple[
             while i < len(rows) and rows[i][0] > line_indent:
                 i += 1
             mapping[key] = ""
+        elif rest.startswith("{") and rest.endswith("}"):
+            mapping[key] = _flow_mapping(rest)
         elif rest.startswith("[") and rest.endswith("]"):
             mapping[key] = _flow_sequence(rest)
         elif rest:

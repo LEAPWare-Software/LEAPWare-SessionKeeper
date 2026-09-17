@@ -180,6 +180,105 @@ def test_matrix_key_supplied_only_by_include_is_resolved(tmp_path):
     assert errors and any("self-hosted" in e for e in errors)
 
 
+def test_flow_mapping_include_entry_is_caught(tmp_path):
+    """`- {os: self-hosted}` is ordinary YAML for a matrix include entry.
+
+    Splitting the item text on its first colon yields the key '{os', which
+    never matches the key `runs-on` references, so the self-hosted value was
+    dropped with no error at all -- a silent miss, not a fail-closed one.
+    """
+    d = _write(tmp_path, (
+        "jobs:\n"
+        "  a:\n"
+        "    strategy:\n"
+        "      matrix:\n"
+        "        os: [ubuntu-latest]\n"
+        "        include:\n"
+        "          - {os: self-hosted}\n"
+        "    runs-on: ${{ matrix.os }}\n"
+    ))
+    errors = hr.check_all(d)
+    assert errors and any("self-hosted" in e for e in errors)
+
+
+def test_flow_mapping_include_entry_all_hosted_passes(tmp_path):
+    d = _write(tmp_path, (
+        "jobs:\n"
+        "  a:\n"
+        "    strategy:\n"
+        "      matrix:\n"
+        "        os: [ubuntu-latest]\n"
+        "        include:\n"
+        "          - {os: macos-14, experimental: true}\n"
+        "    runs-on: ${{ matrix.os }}\n"
+    ))
+    assert hr.check_all(d) == []
+
+
+def test_nested_flow_mapping_fails_closed(tmp_path):
+    # A nested flow mapping is beyond this reader. It must error, never parse
+    # to something plausible-looking and pass.
+    d = _write(tmp_path, "jobs: {a: {runs-on: self-hosted}}\n")
+    assert hr.check_all(d) != []
+
+
+def test_sequence_item_with_an_empty_key_fails_closed(tmp_path):
+    d = _write(tmp_path, (
+        "jobs:\n"
+        "  a:\n"
+        "    strategy:\n"
+        "      matrix:\n"
+        "        os: [ubuntu-latest]\n"
+        "        include:\n"
+        "          - : self-hosted\n"
+        "    runs-on: ${{ matrix.os }}\n"
+    ))
+    assert hr.check_all(d) != []
+
+
+def test_document_end_marker_followed_by_more_content_is_rejected(tmp_path):
+    # `...` ends a YAML document just as `---` starts one. Checking only for
+    # `---` left the same two-document merge open under a different spelling.
+    d = _write(tmp_path, (
+        "jobs:\n"
+        "  a:\n"
+        "    runs-on: self-hosted\n"
+        "...\n"
+        "jobs:\n"
+        "  b:\n"
+        "    runs-on: ubuntu-latest\n"
+    ))
+    errors = hr.check_all(d)
+    assert errors and any("document" in e.lower() for e in errors)
+
+
+def test_trailing_document_end_marker_is_allowed(tmp_path):
+    d = _write(tmp_path, "jobs:\n  a:\n    runs-on: ubuntu-latest\n...\n")
+    assert hr.check_all(d) == []
+
+
+def test_dashes_inside_a_block_scalar_are_not_a_document_boundary(tmp_path):
+    """A shell heredoc separator is not a YAML document marker.
+
+    The marker scan runs before the parser swallows block-scalar content, so
+    a legitimate single-document workflow whose script contains a `---` line
+    was rejected outright.
+    """
+    d = _write(tmp_path, (
+        "jobs:\n"
+        "  a:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - name: print\n"
+        "        run: |\n"
+        "          cat <<'EOF'\n"
+        "          ---\n"
+        "          ...\n"
+        "          EOF\n"
+    ))
+    assert hr.check_all(d) == []
+
+
 def test_windows_11_arm_and_ubuntu_arm_are_hosted():
     # Real, currently-shipping GitHub-hosted Arm64 labels. A pattern requiring
     # a 4-digit Windows year rejects windows-11-arm, which is a false positive
