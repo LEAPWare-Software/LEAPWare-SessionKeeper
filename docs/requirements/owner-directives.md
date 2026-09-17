@@ -70,6 +70,10 @@ owner's original, unelaborated wording.
 18. (2026-09-17) Public repos use GitHub-hosted runners only, never
     self-hosted or local; add a CI check that fails on any `runs-on`
     value other than a GitHub-hosted runner, proven by breaking it on
-    purpose.
+    purpose. This restates **directive 9** and makes it mechanical rather
+    than adding a new requirement — this file is an append-only log of
+    what the owner said in each session, not a deduplicated spec, so both
+    lines stay. `approach.md` should trace 9 and 18 to one functional
+    requirement, not two.
 19. (2026-09-17) Worktrees live only under `.worktrees/<branch>`, never
     as sibling folders.
