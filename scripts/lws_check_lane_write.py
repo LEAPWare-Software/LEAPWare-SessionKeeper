@@ -82,23 +82,55 @@ def _extract_paths(agent: str, raw: dict) -> list[str]:
     return []
 
 
-def _relativize(path_str: str) -> Optional[str]:
-    """Repo-relative form of `path_str`, or None when it is not under REPO_ROOT.
+_EXTENDED_UNC_PREFIX = "\\\\?\\UNC\\"  # \\?\UNC\server\share\... -> \\server\share\...
+_EXTENDED_PREFIX = "\\\\?\\"  # \\?\C:\... -> C:\...
 
-    None means "not this repo's business". The lane rules classify paths
-    *within* this repo; a write to a scratch file, a temp directory or another
-    project elsewhere on the machine sits outside them entirely. Returning the
-    absolute path instead would classify it "other" and deny it, turning a
-    repo lane guard into a machine-wide write block for any session that has
-    this repo as its project directory.
+
+def _strip_extended_prefix(path_str: str) -> str:
+    """Drop a Windows extended-length (`\\\\?\\`) prefix.
+
+    `Path.resolve()` preserves this prefix, so a path that is genuinely inside
+    the repo still fails `relative_to(REPO_ROOT)` with it attached. Normalising
+    it away before the comparison is what stops `\\\\?\\<repo>\\plugins\\codex\\x.py`
+    from reading as "somewhere else entirely".
     """
+    if path_str.startswith(_EXTENDED_UNC_PREFIX):
+        return "\\\\" + path_str[len(_EXTENDED_UNC_PREFIX):]
+    if path_str.startswith(_EXTENDED_PREFIX):
+        return path_str[len(_EXTENDED_PREFIX):]
+    return path_str
+
+
+def _relativize(path_str: str) -> Optional[str]:
+    """Repo-relative form of `path_str`, or None when it is KNOWN to be outside.
+
+    None means "not this repo's business" -- a scratch file, a temp directory,
+    another project elsewhere on the machine. The lane rules classify paths
+    *within* this repo, and denying everything else would turn a repo lane
+    guard into a machine-wide write block for any session that has this repo
+    as its project directory.
+
+    None must never mean "could not tell". A path this function cannot resolve
+    is handed back as-is, which classifies "other" and denies: an unreadable
+    path is not evidence of innocence. Only a clean resolution that lands
+    outside REPO_ROOT earns the None.
+    """
+    candidate = _strip_extended_prefix(path_str)
     try:
-        p = Path(path_str)
-        if p.is_absolute():
-            return str(p.resolve().relative_to(REPO_ROOT.resolve())).replace("\\", "/")
+        p = Path(candidate)
+        if not p.is_absolute():
+            return candidate.replace("\\", "/")
+        resolved = p.resolve()
+        root = REPO_ROOT.resolve()
     except (OSError, ValueError):
-        return None
-    return path_str.replace("\\", "/")
+        return path_str.replace("\\", "/")  # undeterminable -> fail closed
+
+    try:
+        # PurePath.relative_to is case-insensitive on Windows, which is what
+        # makes a differently-cased in-repo path still compare as in-repo.
+        return str(resolved.relative_to(root)).replace("\\", "/")
+    except ValueError:
+        return None  # resolved cleanly, genuinely outside the repo
 
 
 def evaluate(agent: str, raw: dict) -> dict:

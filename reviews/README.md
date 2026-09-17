@@ -7,7 +7,8 @@ directive 5 and `scripts/lws_lanes.py`.
 
 Any commit (with an `LWS-Agent: claude` or `LWS-Agent: codex` trailer,
 never `human`) that touches a shared path — `core/`, `scripts/`, `.github/`,
-`docs/`, `proof/`, `reviews/`, any file at the repo root (`HANDOFF.md`,
+`docs/`, `proof/`, `reviews/`, `.claude/`, `.codex/`, any file at the repo
+root (`HANDOFF.md`,
 `AGENTS.md`, `CLAUDE.md`, `README.md`, `.gitignore`, `pyproject.toml`, ...),
 and any `tests/` path belonging to neither CLI's lane — needs BOTH
 `reviews/<pr>/claude-cto.json` and

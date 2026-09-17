@@ -68,6 +68,16 @@ def test_classify_lane_tests_win_over_shared_tests():
     assert lws_lanes.classify_path("tests/adapters/test_codex_hook_io.py") == "codex"
 
 
+def test_classify_cli_config_dirs_are_shared_not_owned():
+    # `.claude/` and `.codex/` hold each CLI's own enforcement wiring -- the
+    # PreToolUse hook that applies the lane rules to that CLI. Giving a CLI its
+    # own lane over that directory would let it switch off its own guard with
+    # no cross-CLI review, so both are shared. Before this they classified
+    # "other", which no agent could touch at all.
+    assert lws_lanes.classify_path(".claude/settings.json") == "shared"
+    assert lws_lanes.classify_path(".codex/hooks.json") == "shared"
+
+
 def test_classify_other_for_unrelated_path():
     assert lws_lanes.classify_path("examples/policies/example-routing.json") == "other"
 

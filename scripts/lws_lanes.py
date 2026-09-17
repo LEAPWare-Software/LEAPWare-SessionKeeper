@@ -13,8 +13,14 @@ Lane membership (literal, per the D1b brief):
   - codex lane: `plugins/codex/`, `adapters/codex/`, any directory literally
     named `codex` under `tests/`.
   - shared: `core/`, `scripts/`, `.github/`, `docs/`, `proof/`, `reviews/`,
-    `HANDOFF.md`, `AGENTS.md`, `CLAUDE.md`, `README.md`, plus (see below)
-    every file at the repo root and every `tests/` path in neither lane.
+    `.claude/`, `.codex/`, `HANDOFF.md`, `AGENTS.md`, `CLAUDE.md`,
+    `README.md`, plus (see below) every file at the repo root and every
+    `tests/` path in neither lane.
+
+`.claude/` and `.codex/` are shared rather than lane-owned on purpose. They
+hold each CLI's own enforcement wiring -- the PreToolUse hook that applies
+these very rules to that CLI. A CLI that owned its own hook config could
+switch its own guard off with no cross-CLI review, so neither owns its own.
 
 One extension beyond the literal glob, documented here rather than left
 implicit: a test module directly named `test_claude_*` or `*_claude_*`
@@ -69,6 +75,12 @@ SHARED_PREFIXES = (
     "docs/",
     "proof/",
     "reviews/",
+    # Each CLI's own enforcement wiring: the PreToolUse hook that applies
+    # these very lane rules to that CLI. Shared, not lane-owned -- a CLI that
+    # owned its own hook config could switch off its own guard with no
+    # cross-CLI review.
+    ".claude/",
+    ".codex/",
 )
 SHARED_FILES = ("HANDOFF.md", "AGENTS.md", "CLAUDE.md", "README.md")
 
