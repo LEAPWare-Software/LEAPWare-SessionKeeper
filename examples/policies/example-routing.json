@@ -1,8 +1,8 @@
 {
   "$schema": "../../core/policy/schema.json",
   "rules": {
-    "budget_line": {
-      "mode": "deny",
+    "lwr_version": {
+      "mode": "warn",
       "options": {}
     },
     "model_routing": {

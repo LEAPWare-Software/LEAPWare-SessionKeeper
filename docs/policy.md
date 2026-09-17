@@ -5,8 +5,8 @@ A runway policy is one JSON file matching `core/policy/schema.json`:
 ```json
 {
   "rules": {
-    "budget_line": {
-      "mode": "deny",
+    "lwr_version": {
+      "mode": "warn",
       "options": {}
     }
   }
@@ -69,10 +69,12 @@ fail-open.
 
 ## The bundled default
 
-`core/policy/default.json` ships `budget_line` in `deny` mode — owner
-directive 2 requires mechanical enforcement, so the shipped default blocks
-a dispatch with no BUDGET line rather than merely recording it. A project
-may deliberately opt down to `warn` or `off` in its own policy file. See
+`core/policy/default.json` ships `lwr_version` in `warn` mode — a safe
+no-op that reports the plugin version and never blocks a dispatch, even
+if misconfigured to `deny` (see `core/lwr_core/rules/lwr_version.py`).
+LWR ships alongside LWH, which already enforces its own token-policy
+rules mechanically; LWR must not double-enforce until its own runway
+rules exist. See
 `examples/policies/example-routing.json` for a larger, generic illustration
 of a multi-rule policy shape (not a real deployed policy — see that file's
 own header comment).

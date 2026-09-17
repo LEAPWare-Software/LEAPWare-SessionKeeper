@@ -1,18 +1,22 @@
-"""Owner directive 2: enforcement is mechanical (deny), not advisory (warn).
+"""CTO decision, 2026-09-17: LWR must ship a safe minimal hook, not LWH's
+enforcing budget_line rule -- installed next to LWH it would double-enforce,
+and it isn't a runway rule. `lwr_version` replaces it: allow every event,
+report the plugin version, never deny.
 
 `core/policy/default.json` is the policy every real install ships with
 unless a project or user overrides it. This test proves that shipped
-default actually denies a no-BUDGET dispatch, by running both real hook
-entry points (`plugins/claude/lwr/bin/lwr_hook.py`,
-`plugins/codex/lwr/bin/lwr_hook.py`) as subprocesses with NO
-`LWR_POLICY_PATH` override -- so each hook falls back to its own vendored
-`vendor/policy/default.json`, exactly as a real install would -- against a
-no-BUDGET fixture, and asserts both deny.
+default never blocks a dispatch, by running both real hook entry points
+(`plugins/claude/lwr/bin/lwr_hook.py`, `plugins/codex/lwr/bin/lwr_hook.py`)
+as subprocesses with NO `LWR_POLICY_PATH` override -- so each hook falls
+back to its own vendored `vendor/policy/default.json`, exactly as a real
+install would -- and asserts both allow and both report the version.
 
-Mutation: set `core/policy/default.json`'s `budget_line.mode` back to
-`"warn"` and re-run `python scripts/lwr_build.py` to sync the vendor
-trees -- `test_both_hooks_deny_under_the_shipped_default_policy` FAILS
-(the decision becomes "allow", not "deny").
+Mutation: change `lwr_version.evaluate` to honor `config.mode` (i.e. return
+a DENY-mode Finding when configured to deny) and re-run
+`python scripts/lwr_build.py` to sync the vendor trees --
+`test_both_hooks_allow_under_the_shipped_default_policy` FAILS if
+`core/policy/default.json` is also flipped to `"deny"` (the decision
+becomes "deny", not "allow").
 """
 
 from __future__ import annotations
@@ -25,7 +29,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# (plugin dir under plugins/, no-BUDGET fixture for that host's event shape)
+# (plugin dir under plugins/, any fixture for that host's event shape --
+# lwr_version fires on every event regardless of prompt content)
 HOOK_TARGETS = [
     (
         REPO_ROOT / "plugins" / "claude" / "lwr",
@@ -38,7 +43,7 @@ HOOK_TARGETS = [
 ]
 
 
-def test_both_hooks_deny_under_the_shipped_default_policy(tmp_path):
+def test_both_hooks_allow_under_the_shipped_default_policy(tmp_path):
     for plugin_dir, fixture in HOOK_TARGETS:
         hook_script = plugin_dir / "bin" / "lwr_hook.py"
         ledger_path = tmp_path / f"{plugin_dir.parent.name}-ledger.jsonl"
@@ -64,8 +69,7 @@ def test_both_hooks_deny_under_the_shipped_default_policy(tmp_path):
 
         assert result.returncode == 0, result.stderr
         payload = json.loads(result.stdout.strip().splitlines()[-1])
-        assert payload["hookSpecificOutput"]["permissionDecision"] == "deny", (
-            f"{plugin_dir}: shipped default policy did not deny a no-BUDGET "
-            f"dispatch: {payload}"
+        assert payload["hookSpecificOutput"]["permissionDecision"] == "allow", (
+            f"{plugin_dir}: shipped default policy did not allow: {payload}"
         )
-        assert "BUDGET" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "lwr" in payload["hookSpecificOutput"]["permissionDecisionReason"]

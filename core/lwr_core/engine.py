@@ -10,7 +10,7 @@ testable without mocking a subprocess.
 Rule registry: `RULES` is the list of rule modules the engine consults, in
 order. A rule is a plain callable `(Event, RuleConfig) -> Optional[Finding]`;
 returning None means "this rule has no opinion on this event". See
-`rules/budget_line.py` for the shape and `rules/__init__.py` for the
+`rules/lwr_version.py` for the shape and `rules/__init__.py` for the
 registry itself. The mutation test in tests/core proves the registry is
 load-bearing: remove a rule from it and its deny disappears.
 """

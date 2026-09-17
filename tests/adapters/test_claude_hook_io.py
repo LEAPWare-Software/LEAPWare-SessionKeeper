@@ -34,31 +34,32 @@ def test_parse_event_non_agent_tool_has_no_prompt():
     assert event.prompt is None
 
 
-def test_render_decision_deny_shape():
-    policy = Policy(rules={"budget_line": RuleConfig(mode=RuleMode.DENY)})
+def test_render_decision_never_denies_even_when_misconfigured_to_deny():
+    """lwr_version is a no-op: it always allows, even under a policy that
+    (incorrectly) sets it to "deny"."""
+    policy = Policy(rules={"lwr_version": RuleConfig(mode=RuleMode.DENY)})
     event = parse_event(_load("pretooluse_agent_no_budget.json"))
     decision = evaluate(event, policy)
     output = render_decision(decision)
-    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "BUDGET" in output["hookSpecificOutput"]["permissionDecisionReason"]
+    assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert "lwr" in output["hookSpecificOutput"]["permissionDecisionReason"]
 
 
-def test_render_decision_allow_shape_with_budget_line():
-    policy = Policy(rules={"budget_line": RuleConfig(mode=RuleMode.DENY)})
+def test_render_decision_allow_shape_under_shipped_default():
+    policy = Policy(rules={"lwr_version": RuleConfig(mode=RuleMode.WARN)})
     event = parse_event(_load("pretooluse_agent_with_budget.json"))
     decision = evaluate(event, policy)
     output = render_decision(decision)
     assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
-    assert "permissionDecisionReason" not in output["hookSpecificOutput"]
 
 
-def test_render_decision_allow_with_warning_reason():
-    policy = Policy(rules={"budget_line": RuleConfig(mode=RuleMode.WARN)})
+def test_render_decision_allow_with_version_report():
+    policy = Policy(rules={"lwr_version": RuleConfig(mode=RuleMode.WARN)})
     event = parse_event(_load("pretooluse_agent_no_budget.json"))
     decision = evaluate(event, policy)
     output = render_decision(decision)
     assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
-    assert "BUDGET" in output["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "lwr" in output["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_lifecycle_hooks_with_no_tool_are_parsed_without_error():

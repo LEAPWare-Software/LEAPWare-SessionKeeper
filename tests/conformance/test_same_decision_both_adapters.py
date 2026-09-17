@@ -10,7 +10,7 @@ DENY on one host must render byte-for-byte the same shape on the other.
 Where Codex's fixture set has no equivalent of a Claude-only field (e.g.
 `transcript_path`), the test only asserts on the fields both adapters
 populate — `hook_event`, `tool_name`, `prompt` — since those are the only
-fields `budget_line` (or any rule in the registry) reads.
+fields `lwr_version` (or any rule in the registry) reads.
 """
 
 import json
@@ -33,7 +33,7 @@ PAIRED_FIXTURES = [
     ("pretooluse_agent_with_budget.json", "pretooluse_agent_with_budget.json"),
 ]
 
-DENY_POLICY = Policy(rules={"budget_line": RuleConfig(mode=RuleMode.DENY)})
+DENY_POLICY = Policy(rules={"lwr_version": RuleConfig(mode=RuleMode.DENY)})  # lwr_version ignores this and still allows
 
 
 def _load(path: Path) -> dict:
@@ -65,7 +65,7 @@ def test_paired_fixtures_produce_identical_decisions():
 
 def test_warn_mode_decision_renders_identically_both_adapters():
     """A WARN (not DENY) finding still renders the same allow+reason shape."""
-    warn_policy = Policy(rules={"budget_line": RuleConfig(mode=RuleMode.WARN)})
+    warn_policy = Policy(rules={"lwr_version": RuleConfig(mode=RuleMode.WARN)})
     claude_event = claude_parse_event(_load(CLAUDE_FIXTURES / "pretooluse_agent_no_budget.json"))
     codex_event = codex_parse_event(_load(CODEX_FIXTURES / "pretooluse_agent_no_budget.json"))
 

@@ -21,12 +21,16 @@ License: [Apache-2.0](LICENSE).
 
 ## The walking skeleton
 
-One rule ships today, `budget_line` (see
-[docs/rules/budget-line.md](docs/rules/budget-line.md)): a subagent dispatch
-(Claude Code `PreToolUse` on the `Agent` tool) whose prompt has no line
-matching `^BUDGET:\s*\d+k` is denied when the rule is configured in `deny`
-mode. It exists to prove the whole pipeline end to end — event in, pure
-decision, decision out — not because a real policy should stop at one rule.
+One rule ships today, `lwr_version` (see
+[docs/rules/lwr-version.md](docs/rules/lwr-version.md)): a safe no-op that
+fires on every event, reports this build's `lwr_core.__version__`, and
+never denies — even a policy file that (incorrectly) configures it to
+`deny` still allows. It exists to prove the whole pipeline end to end —
+event in, pure decision, decision out — without shipping any real
+enforcement yet: LWR's actual runway rules (wind-down / landing /
+handoff-only / retire) are designed and built in a later session, and this
+rule must not double-enforce anything LWH already enforces in the
+meantime.
 
 ## How it fits together
 

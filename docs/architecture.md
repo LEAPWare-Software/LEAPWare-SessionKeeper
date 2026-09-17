@@ -50,7 +50,7 @@ code — lives in an adapter or a plugin's `bin/` script
 Claude Code and Codex CLI have different hook JSON shapes and different
 manifest formats — both now enforce a `PreToolUse` decision the same way
 (`hookSpecificOutput.permissionDecision`, see `docs/install-codex.md`).
-Rather than writing the `budget_line` rule twice, or writing a
+Rather than writing the `lwr_version` rule twice, or writing a
 Claude-specific engine, every rule is written once against the neutral
 `Event`/`Decision` shapes, and each host gets a thin adapter that
 translates its native format at the edges.
@@ -110,8 +110,8 @@ Sources consulted for this design (both `WebFetch`ed during this change):
 three hosted OSes with nothing installed beyond `actions/setup-python`)
 extracts this exact `command` string from `hooks.json`, substitutes
 `${CLAUDE_PLUGIN_ROOT}` the same way, and runs it through the shell against
-a `deny`-mode policy and a fixture event with no `BUDGET:` line — asserting
-`hookSpecificOutput.permissionDecision == "deny"` on real output, not a
+a `warn`-mode `lwr_version` policy and a fixture event — asserting
+`hookSpecificOutput.permissionDecision == "allow"` on real output, not a
 mock of the launch mechanism.
 
 ## Fail-open, everywhere

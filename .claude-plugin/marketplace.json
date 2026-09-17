@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "lwr",
-      "description": "A token-policy layer that makes an AI coding session's spend rules mechanical. Ships one walking-skeleton rule, budget_line, gating subagent dispatch on a stated token budget. Policy is per-rule off/warn/deny and fails open. See plugins/claude/lwr/.claude-plugin/plugin.json for the full description.",
+      "description": "A rate-limit runway plugin, set up here as a safe minimal skeleton: ships one no-op rule, lwr_version, which allows every event and reports the plugin's version. Policy is per-rule off/warn/deny and fails open. See plugins/claude/lwr/.claude-plugin/plugin.json for the full description.",
       "version": "0.1.0",
       "author": {
         "name": "LEAPWare-Software",

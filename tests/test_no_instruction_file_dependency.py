@@ -6,7 +6,7 @@ Two independent proofs:
    as its own job) finds no reference to either filename in runtime code
    under `plugins/`, `core/`, or `adapters/`.
 2. A dynamic proof: both plugins' hook entry points run correctly — same
-   PreToolUse deny decision — from a working directory with no CLAUDE.md or
+   PreToolUse allow decision — from a working directory with no CLAUDE.md or
    AGENTS.md anywhere up its ancestor chain. If either hook silently walked
    up looking for one of those files, this would either fail to find a
    real one (harmless on its own) or, if it happened to hit one from an
@@ -28,9 +28,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 lwr_check_no_instruction_dep = importlib.import_module("lwr_check_no_instruction_dep")
 
-_DENY_POLICY = {
+_WARN_POLICY = {
     "$schema": "./schema.json",
-    "rules": {"budget_line": {"mode": "deny", "options": {}}},
+    "rules": {"lwr_version": {"mode": "warn", "options": {}}},
 }
 
 # (plugin dir under plugins/, fixture path)
@@ -79,8 +79,8 @@ def test_both_hooks_run_correctly_with_no_instruction_files_up_the_tree(tmp_path
 
     for plugin_dir, fixture in HOOK_TARGETS:
         hook_script = plugin_dir / "bin" / "lwr_hook.py"
-        policy_path = tmp_path / f"{plugin_dir.parent.name}-deny-policy.json"
-        policy_path.write_text(json.dumps(_DENY_POLICY), encoding="utf-8")
+        policy_path = tmp_path / f"{plugin_dir.parent.name}-policy.json"
+        policy_path.write_text(json.dumps(_WARN_POLICY), encoding="utf-8")
         ledger_path = tmp_path / f"{plugin_dir.parent.name}-ledger.jsonl"
 
         env = {
@@ -102,4 +102,4 @@ def test_both_hooks_run_correctly_with_no_instruction_files_up_the_tree(tmp_path
 
         assert result.returncode == 0, result.stderr
         payload = json.loads(result.stdout.strip().splitlines()[-1])
-        assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert payload["hookSpecificOutput"]["permissionDecision"] == "allow"

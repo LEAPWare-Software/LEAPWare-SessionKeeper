@@ -3,7 +3,7 @@
 
 This is a PreToolUse hook wired into THIS repo's own `.claude/settings.json`
 and `.codex/hooks.json` (see those files), separate from the lwr PRODUCT's
-own `budget_line` policy hook — this one enforces owner directive 5 ("Codex
+own `lwr_version` policy hook — this one enforces owner directive 5 ("Codex
 works only on the Codex part, Claude only on the Claude part...") on
 whoever is editing THIS repo, using the same lane classification
 `scripts/lwr_lanes.py` uses for the commit-level `lwr-lanes` CI check. The

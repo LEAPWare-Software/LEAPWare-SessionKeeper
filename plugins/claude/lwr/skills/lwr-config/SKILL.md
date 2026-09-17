@@ -8,7 +8,8 @@ description: Read or edit lwr's token-policy configuration (which rules are off/
 lwr's policy is one JSON file matching `core/policy/schema.json`: a
 `"rules"` object keyed by rule id, each entry an `off` / `warn` / `deny`
 mode plus optional rule-specific `options`. The bundled default lives at
-`core/policy/default.json` and ships `budget_line` in `deny` mode.
+`core/policy/default.json` and ships `lwr_version` in `warn` mode (a
+no-op that reports the plugin version and never denies).
 
 ## Reading the active policy
 
@@ -26,7 +27,7 @@ mode plus optional rule-specific `options`. The bundled default lives at
    rule; do not touch entries for other rules.
 3. Validate the result is valid JSON and matches `core/policy/schema.json`
    before telling the user the change is live.
-4. State plainly what changed: "budget_line: warn -> deny" — not "tightened
+4. State plainly what changed: "lwr_version: warn -> off" — not "tightened
    the policy".
 
 ## The fail-open contract

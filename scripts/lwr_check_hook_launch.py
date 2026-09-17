@@ -13,9 +13,10 @@ Windows, `sh` elsewhere) — the portable dual-interpreter launch chosen in
 safe to test this way, without installing anything beyond a `setup-python`
 Python already on `PATH`.
 
-A deny-mode policy (`budget_line: deny`) is pointed at via `LWR_POLICY_PATH`
-and a `PreToolUse`/`Agent` fixture with no `BUDGET:` line is fed on stdin,
-so a correct run must print `hookSpecificOutput.permissionDecision: "deny"`.
+A policy pointing `lwr_version` at `warn` mode is pointed at via
+`LWR_POLICY_PATH` and a `PreToolUse`/`Agent` fixture is fed on stdin, so a
+correct run must print `hookSpecificOutput.permissionDecision: "allow"`
+(lwr_version never denies).
 
 Usage:
     python scripts/lwr_check_hook_launch.py
@@ -49,9 +50,9 @@ TARGETS = [
     ),
 ]
 
-_DENY_POLICY = {
+_WARN_POLICY = {
     "$schema": "./schema.json",
-    "rules": {"budget_line": {"mode": "deny", "options": {}}},
+    "rules": {"lwr_version": {"mode": "warn", "options": {}}},
 }
 
 
@@ -69,8 +70,8 @@ def _check_one(plugin_dir: Path, root_var: str, fixture: Path, errors: list[str]
     command = _hook_command(hooks_json).replace("${" + root_var + "}", str(plugin_dir))
 
     with tempfile.TemporaryDirectory(prefix="lwr-portable-") as tmp:
-        policy_path = Path(tmp) / "deny-policy.json"
-        policy_path.write_text(json.dumps(_DENY_POLICY), encoding="utf-8")
+        policy_path = Path(tmp) / "warn-policy.json"
+        policy_path.write_text(json.dumps(_WARN_POLICY), encoding="utf-8")
 
         env = dict(os.environ)
         env["LWR_POLICY_PATH"] = str(policy_path)
@@ -101,8 +102,8 @@ def _check_one(plugin_dir: Path, root_var: str, fixture: Path, errors: list[str]
         return
 
     decision = payload.get("hookSpecificOutput", {}).get("permissionDecision")
-    if decision != "deny":
-        errors.append(f"{plugin_dir}: expected permissionDecision 'deny', got {decision!r}: {payload}")
+    if decision != "allow":
+        errors.append(f"{plugin_dir}: expected permissionDecision 'allow', got {decision!r}: {payload}")
 
 
 def main() -> int:

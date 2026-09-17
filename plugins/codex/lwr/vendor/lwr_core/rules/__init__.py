@@ -9,17 +9,17 @@ entry must expose:
 
 To add a rule: write it under `rules/`, import it here, and append it to
 `RULES`. The mutation test `tests/core/test_engine_mutation.py` asserts that
-removing `budget_line` from this list makes its deny disappear from
+removing `lwr_version` from this list makes its finding disappear from
 `evaluate()`'s output for the walking-skeleton fixture — that is the proof
 this registry is load-bearing rather than decorative.
 """
 
 from __future__ import annotations
 
-from . import budget_line
+from . import lwr_version
 
 RULES = [
-    budget_line,
+    lwr_version,
 ]
 
-__all__ = ["RULES", "budget_line"]
+__all__ = ["RULES", "lwr_version"]
