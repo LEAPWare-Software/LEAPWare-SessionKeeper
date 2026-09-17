@@ -29,45 +29,45 @@ jobs:
       - name: Unit / adapter / conformance tests
         run: python -m pytest -q
 
-      - name: Vendor drift check (scripts/lwr_build.py --check)
-        run: python scripts/lwr_build.py --check
+      - name: Vendor drift check (scripts/lws_build.py --check)
+        run: python scripts/lws_build.py --check
 
       - name: Build vendor trees for validators
-        run: python scripts/lwr_build.py
+        run: python scripts/lws_build.py
 
       - name: Validate Claude Code plugin
-        run: python scripts/lwr_validate_claude_plugin.py
+        run: python scripts/lws_validate_claude_plugin.py
 
       - name: Validate Codex plugin
-        run: python scripts/lwr_validate_codex_plugin.py
+        run: python scripts/lws_validate_codex_plugin.py
 
-      - name: lwr-prefix (every user-facing entrypoint starts with lwr)
-        run: python scripts/lwr_check_prefix.py
+      - name: lws-prefix (every user-facing entrypoint starts with lws)
+        run: python scripts/lws_check_prefix.py
 
-      - name: lwr-env-leak (no local-environment or private-project leak)
-        run: python scripts/lwr_check_env_leak.py
+      - name: lws-env-leak (no local-environment or private-project leak)
+        run: python scripts/lws_check_env_leak.py
 
-      - name: lwr-env-leak-history (no leak in any commit added by this PR, even one later reverted)
+      - name: lws-env-leak-history (no leak in any commit added by this PR, even one later reverted)
         if: github.event_name == 'pull_request'
-        # Same base/head reasoning as lwr-commit-identity below: a
+        # Same base/head reasoning as lws-commit-identity below: a
         # working-tree-only scan misses a leak that was committed and then
         # removed again within the same PR -- it is still in the branch's
         # history, which a clone or marketplace pull carries in full. No
         # allow-listed commits: every PR's added lines must be clean.
         run: >-
-          python scripts/lwr_check_env_leak.py
+          python scripts/lws_check_env_leak.py
           --range ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
 
-      - name: lwr-no-instruction-dep (no CLAUDE.md/AGENTS.md runtime dependency)
-        run: python scripts/lwr_check_no_instruction_dep.py
+      - name: lws-no-instruction-dep (no CLAUDE.md/AGENTS.md runtime dependency)
+        run: python scripts/lws_check_no_instruction_dep.py
 
-      - name: lwr-proof (proof/*.json records validate against proof/schema.json)
-        run: python scripts/lwr_check_proof.py
+      - name: lws-proof (proof/*.json records validate against proof/schema.json)
+        run: python scripts/lws_check_proof.py
 
       - name: HANDOFF.md shape check
-        run: python scripts/lwr_handoff.py --check
+        run: python scripts/lws_handoff.py --check
 
-      - name: lwr-commit-identity (LEAPWare or an allow-listed bot only)
+      - name: lws-commit-identity (LEAPWare or an allow-listed bot only)
         if: github.event_name == 'pull_request'
         # github.event.pull_request.*.sha, not origin/<base>..HEAD: a
         # pull_request checkout's HEAD is the synthetic refs/pull/N/merge
@@ -75,16 +75,16 @@ jobs:
         # not a real commit on the PR branch -- checking that range flags
         # the App itself as an offending author on every PR run.
         run: >-
-          python scripts/lwr_check_commit_identity.py
+          python scripts/lws_check_commit_identity.py
           --base ${{ github.event.pull_request.base.sha }}
           --head ${{ github.event.pull_request.head.sha }}
 
-      - name: lwr-lanes (per-commit lane discipline + shared-path review gate)
+      - name: lws-lanes (per-commit lane discipline + shared-path review gate)
         if: github.event_name == 'pull_request'
-        # Same base/head reasoning as lwr-commit-identity above: check the
+        # Same base/head reasoning as lws-commit-identity above: check the
         # PR's own real commits, never the synthetic merge commit.
         run: >-
-          python scripts/lwr_lanes.py
+          python scripts/lws_lanes.py
           --base ${{ github.event.pull_request.base.sha }}
           --head ${{ github.event.pull_request.head.sha }}
           --pr-number ${{ github.event.pull_request.number }}
@@ -103,4 +103,4 @@ jobs:
           python-version: "3.12"
 
       - name: Run both hooks exactly as each hooks.json declares them
-        run: python scripts/lwr_check_hook_launch.py
+        run: python scripts/lws_check_hook_launch.py

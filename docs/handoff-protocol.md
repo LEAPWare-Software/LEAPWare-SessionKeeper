@@ -2,7 +2,7 @@
 
 `HANDOFF.md`, at the repo root, is the single re-derivable state file a
 new session reads first. This document is the protocol that keeps it
-true. It has no runtime role — the lwr plugin never reads it.
+true. It has no runtime role — the lws plugin never reads it.
 
 ## When to write a handoff
 
@@ -13,14 +13,14 @@ Write (or update) `HANDOFF.md` at each of these points:
 3. After each deliverable lands (its own Proof of Completion, see below,
    plus an updated "next step" in the "In flight" section).
 
-A handoff is cheap and mechanical (`scripts/lwr_handoff.py --write`); the
+A handoff is cheap and mechanical (`scripts/lws_handoff.py --write`); the
 cost of skipping one is a session that starts from guesswork instead of
 fact.
 
 ## What the generated block contains
 
-Between `<!-- lwr-handoff:begin -->` and `<!-- lwr-handoff:end -->` in
-`HANDOFF.md`, `scripts/lwr_handoff.py --write` regenerates:
+Between `<!-- lws-handoff:begin -->` and `<!-- lws-handoff:end -->` in
+`HANDOFF.md`, `scripts/lws_handoff.py --write` regenerates:
 
 - UTC timestamp of generation.
 - CLI name and session id (when the caller supplies them; omitted rather
@@ -41,7 +41,7 @@ the same commit that regenerates the block.
 ## Size cap
 
 `HANDOFF.md` must stay at or under **6000 bytes**. This is not a soft
-target — `scripts/lwr_handoff.py --check` fails the build over it. A
+target — `scripts/lws_handoff.py --check` fails the build over it. A
 one-page handoff that nobody reads in full is worse than no handoff;
 trim prose before growing the cap.
 
@@ -66,5 +66,5 @@ A deliverable is DONE only when: committed, pushed, CI is green on that
 push, and a proof record exists (what changed, why, how it was verified —
 commit message and/or PR description is sufficient; no separate proof
 file is required). Every proven delivery is announced with a line
-starting `LWR - Alert: <id> DONE ...` so it is grep-able across a long
+starting `LWS - Alert: <id> DONE ...` so it is grep-able across a long
 session.

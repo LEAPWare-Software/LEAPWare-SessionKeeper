@@ -1,5 +1,5 @@
 {
-  "description": "In-repo lane guard for this repo's own contributors (see scripts/lwr_check_lane_write.py)",
+  "description": "In-repo lane guard for this repo's own contributors (see scripts/lws_check_lane_write.py)",
   "hooks": {
     "PreToolUse": [
       {
@@ -7,8 +7,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/lwr_check_lane_write.py --agent codex",
-            "commandWindows": "python scripts\\lwr_check_lane_write.py --agent codex",
+            "command": "python3 scripts/lws_check_lane_write.py --agent codex",
+            "commandWindows": "python scripts\\lws_check_lane_write.py --agent codex",
             "timeout": 10
           }
         ]

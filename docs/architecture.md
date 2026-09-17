@@ -11,18 +11,18 @@
             +-------------------+        adapters/codex/hook_io.py
                       |
                       v
-                Event (neutral)          core/lwr_core/events.py
+                Event (neutral)          core/lws_core/events.py
                       |
                       v
             +-------------------+
-            |  engine.evaluate()  |      core/lwr_core/engine.py
+            |  engine.evaluate()  |      core/lws_core/engine.py
             +-------------------+
                  /            \
         Policy (loaded)   RULES (registry)
-     core/lwr_core/config.py   core/lwr_core/rules/__init__.py
+     core/lws_core/config.py   core/lws_core/rules/__init__.py
                       |
                       v
-                Decision (neutral)       core/lwr_core/engine.py
+                Decision (neutral)       core/lws_core/engine.py
                       |
                       v
             +----------------------+
@@ -33,7 +33,7 @@
               host-native output
 ```
 
-`core/lwr_core` does **no I/O**: no file reads, no stdin, no environment
+`core/lws_core` does **no I/O**: no file reads, no stdin, no environment
 variables, no clock. Every function in it is `(data in) -> (data out)`.
 This is what the mutation test in `tests/core/test_engine_mutation.py` and
 the conformance test in `tests/conformance/` rely on: the same `Event`
@@ -43,14 +43,14 @@ which adapter built the `Event` or what will be done with the `Decision`.
 Everything that touches the outside world — reading stdin, resolving a
 policy file path, appending a ledger line, writing stdout, setting an exit
 code — lives in an adapter or a plugin's `bin/` script
-(`plugins/claude/lwr/bin/lwr_hook.py`).
+(`plugins/claude/lws/bin/lws_hook.py`).
 
 ## Why two adapters, one core
 
 Claude Code and Codex CLI have different hook JSON shapes and different
 manifest formats — both now enforce a `PreToolUse` decision the same way
 (`hookSpecificOutput.permissionDecision`, see `docs/install-codex.md`).
-Rather than writing the `lwr_version` rule twice, or writing a
+Rather than writing the `lws_version` rule twice, or writing a
 Claude-specific engine, every rule is written once against the neutral
 `Event`/`Decision` shapes, and each host gets a thin adapter that
 translates its native format at the edges.
@@ -59,10 +59,10 @@ translates its native format at the edges.
 
 A Claude Code plugin (and a Codex plugin) is distributed as its own
 self-contained directory — it cannot import a sibling package from outside
-that directory at install time. `scripts/lwr_build.py` copies `core/lwr_core`,
+that directory at install time. `scripts/lws_build.py` copies `core/lws_core`,
 `core/policy`, and the matching `adapters/<host>` into
-`plugins/<host>/lwr/vendor/` before a plugin is installed or released.
-`scripts/lwr_build.py --check` (run in CI) fails if a committed `vendor/`
+`plugins/<host>/lws/vendor/` before a plugin is installed or released.
+`scripts/lws_build.py --check` (run in CI) fails if a committed `vendor/`
 directory — during local development, not committed per `.gitignore` — has
 drifted from its source. Nobody should hand-edit anything under `vendor/`.
 
@@ -73,20 +73,20 @@ not `python3` vs. `python`, not a pinned minor version, not a Windows
 Python-Launcher (`py`) that on some Windows installs is a Microsoft Store
 stub that prints a store prompt instead of running anything.
 
-`plugins/claude/lwr/hooks/hooks.json`'s `command` is a single string, run
+`plugins/claude/lws/hooks/hooks.json`'s `command` is a single string, run
 through the platform shell exactly as Claude Code invokes any `"type":
 "command"` hook (`cmd.exe` on Windows, `sh` elsewhere — confirmed by
 testing, see below):
 
 ```
-python3 "${CLAUDE_PLUGIN_ROOT}/bin/lwr_hook.py" || python "${CLAUDE_PLUGIN_ROOT}/bin/lwr_hook.py"
+python3 "${CLAUDE_PLUGIN_ROOT}/bin/lws_hook.py" || python "${CLAUDE_PLUGIN_ROOT}/bin/lws_hook.py"
 ```
 
 `||` is a shell primitive both `cmd.exe` and POSIX `sh` support: the right
 side only runs if the left side's command could not even be started (exit
 127 on POSIX, 9009 on `cmd.exe` — "not recognized"). This is safe here, and
 would NOT be safe for a script that signals its decision through its exit
-code, because `${CLAUDE_PLUGIN_ROOT}/bin/lwr_hook.py` always exits `0` and
+code, because `${CLAUDE_PLUGIN_ROOT}/bin/lws_hook.py` always exits `0` and
 carries its decision in `hookSpecificOutput.permissionDecision` on stdout
 instead (see `docs/install-claude.md`) — so a `python3` run that
 successfully denies still exits `0`, and the `python` fallback is never
@@ -106,11 +106,11 @@ Sources consulted for this design (both `WebFetch`ed during this change):
   cross-platform Python interpreter selection — that choice, and its
   reasoning above, is this project's own.
 
-`scripts/lwr_check_hook_launch.py` (the `lwr-portable` CI job, run on all
+`scripts/lws_check_hook_launch.py` (the `lwr-portable` CI job, run on all
 three hosted OSes with nothing installed beyond `actions/setup-python`)
 extracts this exact `command` string from `hooks.json`, substitutes
 `${CLAUDE_PLUGIN_ROOT}` the same way, and runs it through the shell against
-a `warn`-mode `lwr_version` policy and a fixture event — asserting
+a `warn`-mode `lws_version` policy and a fixture event — asserting
 `hookSpecificOutput.permissionDecision == "allow"` on real output, not a
 mock of the launch mechanism.
 
@@ -119,13 +119,13 @@ mock of the launch mechanism.
 Three independent layers all fail open, each documented at its own layer
 rather than assumed:
 
-1. `lwr_core.config.load_policy_dict`: a missing or malformed policy
+1. `lws_core.config.load_policy_dict`: a missing or malformed policy
    dict resolves every unmentioned or misconfigured rule to `off`. See
    `docs/policy.md#fail-open`.
-2. `lwr_core.engine.evaluate`: an exception raised inside a single rule is
+2. `lws_core.engine.evaluate`: an exception raised inside a single rule is
    caught and downgraded to a `warn`-shaped finding rather than propagating
    or defaulting to `deny`.
-3. `plugins/claude/lwr/bin/lwr_hook.py`: a policy file that cannot be
+3. `plugins/claude/lws/bin/lws_hook.py`: a policy file that cannot be
    read or parsed at all is treated as `None`, which layer 1 above then
    treats as an all-`off` policy. A ledger write failure is swallowed
    rather than blocking the decision from being returned.

@@ -2,7 +2,7 @@
 
 Two independent proofs:
 
-1. A static scan (`scripts/lwr_check_no_instruction_dep.py`, also run in CI
+1. A static scan (`scripts/lws_check_no_instruction_dep.py`, also run in CI
    as its own job) finds no reference to either filename in runtime code
    under `plugins/`, `core/`, or `adapters/`.
 2. A dynamic proof: both plugins' hook entry points run correctly — same
@@ -26,28 +26,28 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-lwr_check_no_instruction_dep = importlib.import_module("lwr_check_no_instruction_dep")
+lws_check_no_instruction_dep = importlib.import_module("lws_check_no_instruction_dep")
 
 _WARN_POLICY = {
     "$schema": "./schema.json",
-    "rules": {"lwr_version": {"mode": "warn", "options": {}}},
+    "rules": {"lws_version": {"mode": "warn", "options": {}}},
 }
 
 # (plugin dir under plugins/, fixture path)
 HOOK_TARGETS = [
     (
-        REPO_ROOT / "plugins" / "claude" / "lwr",
+        REPO_ROOT / "plugins" / "claude" / "lws",
         REPO_ROOT / "tests" / "adapters" / "fixtures" / "claude" / "pretooluse_agent_no_budget.json",
     ),
     (
-        REPO_ROOT / "plugins" / "codex" / "lwr",
+        REPO_ROOT / "plugins" / "codex" / "lws",
         REPO_ROOT / "tests" / "adapters" / "fixtures" / "codex" / "pretooluse_agent_no_budget.json",
     ),
 ]
 
 
 def test_scan_finds_no_reference_in_this_checkout():
-    assert lwr_check_no_instruction_dep.find_violations() == []
+    assert lws_check_no_instruction_dep.find_violations() == []
 
 
 def test_scan_catches_a_planted_reference(tmp_path):
@@ -56,15 +56,15 @@ def test_scan_catches_a_planted_reference(tmp_path):
     planted = scan_root / "leaky.py"
     planted.write_text('"""Reads CLAUDE.md for policy."""\n', encoding="utf-8")
 
-    original_dirs = lwr_check_no_instruction_dep.SCAN_DIRS
-    original_root = lwr_check_no_instruction_dep.REPO_ROOT
+    original_dirs = lws_check_no_instruction_dep.SCAN_DIRS
+    original_root = lws_check_no_instruction_dep.REPO_ROOT
     try:
-        lwr_check_no_instruction_dep.REPO_ROOT = tmp_path
-        lwr_check_no_instruction_dep.SCAN_DIRS = ("plugins",)
-        violations = lwr_check_no_instruction_dep.find_violations()
+        lws_check_no_instruction_dep.REPO_ROOT = tmp_path
+        lws_check_no_instruction_dep.SCAN_DIRS = ("plugins",)
+        violations = lws_check_no_instruction_dep.find_violations()
     finally:
-        lwr_check_no_instruction_dep.REPO_ROOT = original_root
-        lwr_check_no_instruction_dep.SCAN_DIRS = original_dirs
+        lws_check_no_instruction_dep.REPO_ROOT = original_root
+        lws_check_no_instruction_dep.SCAN_DIRS = original_dirs
 
     assert any("CLAUDE.md" in v for v in violations)
 
@@ -78,14 +78,14 @@ def test_both_hooks_run_correctly_with_no_instruction_files_up_the_tree(tmp_path
         assert not (parent / "AGENTS.md").exists()
 
     for plugin_dir, fixture in HOOK_TARGETS:
-        hook_script = plugin_dir / "bin" / "lwr_hook.py"
+        hook_script = plugin_dir / "bin" / "lws_hook.py"
         policy_path = tmp_path / f"{plugin_dir.parent.name}-policy.json"
         policy_path.write_text(json.dumps(_WARN_POLICY), encoding="utf-8")
         ledger_path = tmp_path / f"{plugin_dir.parent.name}-ledger.jsonl"
 
         env = {
-            "LWR_POLICY_PATH": str(policy_path),
-            "LWR_LEDGER_PATH": str(ledger_path),
+            "LWS_POLICY_PATH": str(policy_path),
+            "LWS_LEDGER_PATH": str(ledger_path),
             "PATH": __import__("os").environ.get("PATH", ""),
             "SYSTEMROOT": __import__("os").environ.get("SYSTEMROOT", ""),
         }

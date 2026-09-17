@@ -1,4 +1,4 @@
-# GitHub Apps: lwr-claude, lwr-codex
+# GitHub Apps: lws-claude, lws-codex
 
 Two least-privilege GitHub Apps give each CLI its own committing/merging
 identity in this repo, instead of either CLI acting as a human account or
@@ -8,7 +8,7 @@ exactly what gets clicked.
 
 ## Why two Apps, not one
 
-`lwr-claude` is Claude Code's identity, `lwr-codex` is Codex's. Separate
+`lws-claude` is Claude Code's identity, `lws-codex` is Codex's. Separate
 identities mean a compromised or misbehaving credential for one CLI is
 revocable (delete/reinstall that one App) without touching the other, and
 commit/PR authorship in `git log` and the GitHub UI tells the two apart.
@@ -23,7 +23,7 @@ commit/PR authorship in `git log` and the GitHub UI tells the two apart.
 | Metadata | Read | Required baseline for any App |
 
 No other repository permission, and **no organization permission** — these
-Apps operate on `LEAPWare-Software/LEAPWare-Runway` only, nothing
+Apps operate on `LEAPWare-Software/LEAPWare-SessionKeeper` only, nothing
 org-wide. Webhook is **inactive** (`hook_attributes.active: false`): these
 Apps are used for API calls (`gh api` / REST) made by a CLI session, not for
 receiving events.
@@ -39,7 +39,7 @@ form-filling:
    (or, for a personal-account App instead of an org App, the equivalent
    user settings page).
 2. On that page there is a form that POSTs a manifest to GitHub; use the
-   contents of `.github/apps/lwr-claude.json` (or `lwr-codex.json`) as the
+   contents of `.github/apps/lws-claude.json` (or `lws-codex.json`) as the
    manifest body — GitHub's own manifest flow expects it submitted via a
    small auto-submitting HTML form or the `gh api` App-manifest conversion
    endpoint, not pasted directly into the App settings UI field-by-field.
@@ -49,7 +49,7 @@ form-filling:
 3. After creation, GitHub shows the App's **private key** exactly once —
    download it immediately. It is not recoverable afterward; a lost key
    means generating a new one (the old one still works until revoked).
-4. Install the App on `LEAPWare-Software/LEAPWare-Runway` only (not
+4. Install the App on `LEAPWare-Software/LEAPWare-SessionKeeper` only (not
    "all repositories").
 5. Note the **App ID** and **Installation ID** — both are needed alongside
    the private key to authenticate as the App (e.g. via `gh auth` App-token
@@ -64,7 +64,7 @@ like a deploy credential, not a config value:
   whatever LEAPWare already uses for Alpaca/broker credentials is the right
   place, not a new one-off). Never commit it, never put it in `.env` even
   locally, never paste it into a chat transcript.
-- Each laptop that needs to act as `lwr-claude` or `lwr-codex` pulls the key
+- Each laptop that needs to act as `lws-claude` or `lws-codex` pulls the key
   from that secrets manager at session start (or has it injected as an
   environment variable by the shell profile, itself sourced from the
   secrets manager) — it is never written to disk inside either repo

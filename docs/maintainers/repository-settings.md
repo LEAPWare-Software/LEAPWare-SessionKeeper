@@ -41,8 +41,8 @@ visible by clicking through repo Settings.
 
 ```
 gh auth login            # once, if not already authenticated
-python scripts/lwr_apply_rulesets.py --dry-run   # inspect the JSON that would be sent
-python scripts/lwr_apply_rulesets.py             # create or update by name
+python scripts/lws_apply_rulesets.py --dry-run   # inspect the JSON that would be sent
+python scripts/lws_apply_rulesets.py             # create or update by name
 ```
 
 `apply_rulesets.py` reads every `.github/rulesets/*.json` file, looks up
@@ -58,7 +58,7 @@ Squash-only, auto-merge-eligible, delete-branch-on-merge are repository
 settings, not ruleset rules:
 
 ```
-gh api -X PATCH repos/LEAPWare-Software/LEAPWare-Runway \
+gh api -X PATCH repos/LEAPWare-Software/LEAPWare-SessionKeeper \
   -F allow_squash_merge=true \
   -F allow_merge_commit=false \
   -F allow_rebase_merge=false \

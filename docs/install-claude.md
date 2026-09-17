@@ -1,20 +1,20 @@
-# Installing runway on Claude Code
+# Installing sessionkeeper on Claude Code
 
 ## From this local checkout (development)
 
 1. In Claude Code, add this repository as a marketplace source pointing at
    `.claude-plugin/marketplace.json` (root of this repo), or add
-   `plugins/claude/lwr` directly as a local plugin path, per Claude Code's
+   `plugins/claude/lws` directly as a local plugin path, per Claude Code's
    own plugin-development docs.
-2. Before installing, run `python scripts/lwr_build.py` from the repo root so
-   `plugins/claude/lwr/vendor/` contains a current copy of `lwr_core` and
+2. Before installing, run `python scripts/lws_build.py` from the repo root so
+   `plugins/claude/lws/vendor/` contains a current copy of `lws_core` and
    `adapters/claude` — the plugin cannot import from outside its own
    directory once installed.
-3. Enable the `runway` plugin.
+3. Enable the `sessionkeeper` plugin.
 
 ## What it registers
 
-One hook, in `plugins/claude/lwr/hooks/hooks.json`:
+One hook, in `plugins/claude/lws/hooks/hooks.json`:
 
 ```json
 {
@@ -22,7 +22,7 @@ One hook, in `plugins/claude/lwr/hooks/hooks.json`:
   "hooks": [
     {
       "type": "command",
-      "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/lwr_hook.py\" || python \"${CLAUDE_PLUGIN_ROOT}/bin/lwr_hook.py\""
+      "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/lws_hook.py\" || python \"${CLAUDE_PLUGIN_ROOT}/bin/lws_hook.py\""
     }
   ]
 }
@@ -41,7 +41,7 @@ stdout, never via exit code) and for the official docs consulted.
 
 ## What it does on each dispatch
 
-`plugins/claude/lwr/bin/lwr_hook.py` reads the `PreToolUse` JSON from
+`plugins/claude/lws/bin/lws_hook.py` reads the `PreToolUse` JSON from
 stdin, evaluates it against the active policy (see `docs/policy.md`), and
 writes a JSON decision to stdout:
 
@@ -53,7 +53,7 @@ writes a JSON decision to stdout:
   carrying any `warn`-mode findings (visible, non-blocking).
 
 Every evaluated event is also appended as one JSON line to a ledger file —
-see `docs/rules/budget-line.md` and `lwr-report`'s `SKILL.md` for how to
+see `docs/rules/budget-line.md` and `lws-report`'s `SKILL.md` for how to
 read it.
 
 ## Hook event JSON shapes referenced

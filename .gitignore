@@ -10,7 +10,10 @@ dist/
 # Runtime state a plugin install writes; never part of the shipped tree.
 *.jsonl
 state/
-plugins/*/lwr/state/
+plugins/*/lws/state/
+
+# Worktrees live only under .worktrees/<branch>, never as a sibling folder.
+.worktrees/
 
 # Python
 __pycache__/

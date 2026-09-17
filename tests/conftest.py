@@ -1,5 +1,5 @@
-"""Put `core/` and the repo root on sys.path so tests import `lwr_core` and
-`adapters.*` the same way `plugins/*/lwr/bin/lwr_hook.py`'s vendored copy
+"""Put `core/` and the repo root on sys.path so tests import `lws_core` and
+`adapters.*` the same way `plugins/*/lws/bin/lws_hook.py`'s vendored copy
 does, without requiring an editable install.
 """
 

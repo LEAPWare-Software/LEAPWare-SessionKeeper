@@ -2,6 +2,6 @@
   "hook_event_name": "PreToolUse",
   "tool_name": "apply_patch",
   "tool_input": {
-    "input": "*** Begin Patch\n*** Update File: plugins/codex/lwr/bin/lwr_hook.py\n@@\n-old\n+new\n*** End Patch\n"
+    "input": "*** Begin Patch\n*** Update File: plugins/codex/lws/bin/lws_hook.py\n@@\n-old\n+new\n*** End Patch\n"
   }
 }

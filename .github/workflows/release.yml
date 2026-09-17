@@ -21,8 +21,8 @@ jobs:
       - name: Test before releasing
         run: python -m pytest -q
 
-      - name: Build zip artifacts (scripts/lwr_release.py)
-        run: python scripts/lwr_release.py
+      - name: Build zip artifacts (scripts/lws_release.py)
+        run: python scripts/lws_release.py
 
       - name: Upload artifacts to the GitHub release
         uses: softprops/action-gh-release@v2

@@ -1,14 +1,14 @@
 {
   "$schema": "../../core/policy/schema.json",
   "rules": {
-    "lwr_version": {
+    "lws_version": {
       "mode": "warn",
       "options": {}
     },
     "model_routing": {
       "mode": "warn",
       "options": {
-        "_note": "Illustrative only: model_routing is NOT a shipped rule in core/lwr_core/rules/__init__.py. This shows the SHAPE a task-class -> model policy could take once such a rule exists; a policy file's semantics are entirely up to the rule that reads its 'options'.",
+        "_note": "Illustrative only: model_routing is NOT a shipped rule in core/lws_core/rules/__init__.py. This shows the SHAPE a task-class -> model policy could take once such a rule exists; a policy file's semantics are entirely up to the rule that reads its 'options'.",
         "task_classes": {
           "default_recon": { "model": "small-fast-model", "max_effort": "low" },
           "spec_implementation": { "model": "standard-model", "max_effort": "medium" },

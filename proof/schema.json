@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "lwr Proof of Completion record",
+  "title": "lws Proof of Completion record",
   "description": "Owner directive 7: Proof of Completion on every deliverable; done = committed AND pushed with a proof record and green CI. See proof/README.md.",
   "type": "object",
   "additionalProperties": true,
@@ -19,7 +19,7 @@
     "checked_by": {
       "type": "string",
       "minLength": 1,
-      "description": "Identity of whoever independently checked it. Must differ from 'author' — see the schema-level check in scripts/lwr_check_proof.py."
+      "description": "Identity of whoever independently checked it. Must differ from 'author' — see the schema-level check in scripts/lws_check_proof.py."
     },
     "commit": {
       "type": "string",
@@ -50,7 +50,7 @@
           "sha256": {
             "type": "string",
             "pattern": "^[0-9a-f]{64}$",
-            "description": "sha256 of the command's full captured output (stdout+stderr concatenated), so a 10-line tail can't quietly hide a truncated failure — see scripts/lwr_check_proof.py's re-hash check."
+            "description": "sha256 of the command's full captured output (stdout+stderr concatenated), so a 10-line tail can't quietly hide a truncated failure — see scripts/lws_check_proof.py's re-hash check."
           }
         }
       }

@@ -1,14 +1,14 @@
 {
-  "name": "LEAPWare-Runway",
+  "name": "LEAPWare-SessionKeeper",
   "interface": {
-    "displayName": "LEAPWare Runway"
+    "displayName": "LEAPWare SessionKeeper"
   },
   "plugins": [
     {
-      "name": "lwr",
+      "name": "lws",
       "source": {
         "source": "local",
-        "path": "./plugins/codex/lwr"
+        "path": "./plugins/codex/lws"
       },
       "policy": {
         "installation": "AVAILABLE",

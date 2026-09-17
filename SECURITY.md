@@ -3,14 +3,14 @@
 ## Reporting a vulnerability
 
 Please report a suspected vulnerability privately via GitHub's
-["Report a vulnerability"](https://github.com/LEAPWare-Software/LEAPWare-Runway/security/advisories/new)
+["Report a vulnerability"](https://github.com/LEAPWare-Software/LEAPWare-SessionKeeper/security/advisories/new)
 flow on this repository (once published), rather than a public issue. If
 that is not available yet, open an issue with the security-sensitive
 details omitted and a maintainer will follow up privately.
 
 Include, where possible:
 
-- The affected file(s) or plugin (`plugins/claude/lwr` or `plugins/codex/lwr`).
+- The affected file(s) or plugin (`plugins/claude/lws` or `plugins/codex/lws`).
 - Whether the issue is in the pure engine (`core/`), an adapter, or a
   plugin's own script.
 - Reproduction steps and, if relevant, whether a `deny`-mode rule can be

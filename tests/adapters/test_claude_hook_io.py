@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 
 from adapters.claude.hook_io import parse_event, render_decision
-from lwr_core.config import Policy, RuleConfig, RuleMode
-from lwr_core.engine import evaluate
+from lws_core.config import Policy, RuleConfig, RuleMode
+from lws_core.engine import evaluate
 
 FIXTURES = Path(__file__).parent / "fixtures" / "claude"
 
@@ -35,18 +35,18 @@ def test_parse_event_non_agent_tool_has_no_prompt():
 
 
 def test_render_decision_never_denies_even_when_misconfigured_to_deny():
-    """lwr_version is a no-op: it always allows, even under a policy that
+    """lws_version is a no-op: it always allows, even under a policy that
     (incorrectly) sets it to "deny"."""
-    policy = Policy(rules={"lwr_version": RuleConfig(mode=RuleMode.DENY)})
+    policy = Policy(rules={"lws_version": RuleConfig(mode=RuleMode.DENY)})
     event = parse_event(_load("pretooluse_agent_no_budget.json"))
     decision = evaluate(event, policy)
     output = render_decision(decision)
     assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
-    assert "lwr" in output["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "lws" in output["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_render_decision_allow_shape_under_shipped_default():
-    policy = Policy(rules={"lwr_version": RuleConfig(mode=RuleMode.WARN)})
+    policy = Policy(rules={"lws_version": RuleConfig(mode=RuleMode.WARN)})
     event = parse_event(_load("pretooluse_agent_with_budget.json"))
     decision = evaluate(event, policy)
     output = render_decision(decision)
@@ -54,12 +54,12 @@ def test_render_decision_allow_shape_under_shipped_default():
 
 
 def test_render_decision_allow_with_version_report():
-    policy = Policy(rules={"lwr_version": RuleConfig(mode=RuleMode.WARN)})
+    policy = Policy(rules={"lws_version": RuleConfig(mode=RuleMode.WARN)})
     event = parse_event(_load("pretooluse_agent_no_budget.json"))
     decision = evaluate(event, policy)
     output = render_decision(decision)
     assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
-    assert "lwr" in output["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "lws" in output["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_lifecycle_hooks_with_no_tool_are_parsed_without_error():
