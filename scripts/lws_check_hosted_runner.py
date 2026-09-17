@@ -113,6 +113,10 @@ class MultiDocumentError(ValueError):
 
 _BLOCK_SCALAR_RE = re.compile(r"^[^:]+:\s*[|>][-+0-9]*\s*$")
 
+# A YAML key cannot carry a bare flow delimiter. Seeing one means the line was
+# split in the wrong place, so whatever came out of the split is fiction.
+_IMPOSSIBLE_KEY_RE = re.compile(r"[\[\]{}]")
+
 
 def _significant_lines(text: str) -> list[tuple[int, str]]:
     """(indent, content) for each line that carries structure.
@@ -150,10 +154,13 @@ def _significant_lines(text: str) -> list[tuple[int, str]]:
         if not content:
             continue
 
-        if content == "...":
+        # A document marker lives at column 0. An indented `...` is a plain
+        # scalar folded onto a continuation line, not a second document, and
+        # rejecting it fails a workflow that is perfectly well-formed.
+        if indent == 0 and content == "...":
             doc_ended = True
             continue
-        if content == "---" or content.startswith("--- "):
+        if indent == 0 and (content == "---" or content.startswith("--- ")):
             if rows or doc_ended:
                 raise MultiDocumentError(
                     "multi-document YAML is not supported by this check"
@@ -233,10 +240,18 @@ def _parse_block(rows: list[tuple[int, str]], start: int, indent: int) -> tuple[
 
             if head.startswith("{") and head.endswith("}"):
                 items.append(_flow_mapping(head))
-            elif head and ":" in head and not head.startswith("["):
+            elif head.startswith("{") or head.startswith("["):
+                # A flow collection that does not close on this line. YAML
+                # allows it; this reader does not follow it, and guessing
+                # would mis-split the line. Fail closed.
+                items.append(None)
+            elif head and ":" in head:
                 key, _, rest = head.partition(":")
                 name = _scalar(key)
-                if not name:
+                if not name or _IMPOSSIBLE_KEY_RE.search(name):
+                    # A key carrying a flow delimiter is proof the line was
+                    # mis-split, whatever the spelling that produced it. This
+                    # closes the class rather than one more instance of it.
                     items.append(None)  # malformed -> the caller fails closed
                     continue
                 entry: dict = {name: _scalar(rest) if rest.strip() else ""}

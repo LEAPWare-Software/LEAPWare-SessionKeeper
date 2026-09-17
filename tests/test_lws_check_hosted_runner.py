@@ -236,6 +236,63 @@ def test_sequence_item_with_an_empty_key_fails_closed(tmp_path):
     assert hr.check_all(d) != []
 
 
+def test_line_wrapped_flow_mapping_include_fails_closed(tmp_path):
+    """A flow mapping may close on a later line. That must not fall through.
+
+    Routing into the flow-mapping parser only when the item closes on the same
+    source line leaves the naive first-colon split handling the wrapped form,
+    which yields the key '{os' -- a valid-looking dict with the wrong key, so
+    the value is dropped with no error, exactly the bug the flow-mapping
+    parser was added to fix.
+    """
+    d = _write(tmp_path, (
+        "jobs:\n"
+        "  build:\n"
+        "    strategy:\n"
+        "      matrix:\n"
+        "        os: [ubuntu-latest]\n"
+        "        include:\n"
+        "          - {os: self-hosted,\n"
+        "             extra: 1}\n"
+        "    runs-on: ${{ matrix.os }}\n"
+    ))
+    assert hr.check_all(d) != []
+
+
+def test_a_key_that_could_not_be_a_real_yaml_key_fails_closed(tmp_path):
+    # Closing the class rather than the instance: a key carrying a flow
+    # delimiter is proof the line was mis-split, whatever the spelling.
+    d = _write(tmp_path, (
+        "jobs:\n"
+        "  build:\n"
+        "    strategy:\n"
+        "      matrix:\n"
+        "        os: [ubuntu-latest]\n"
+        "        include:\n"
+        "          - [os: self-hosted,\n"
+        "             extra]\n"
+        "    runs-on: ${{ matrix.os }}\n"
+    ))
+    assert hr.check_all(d) != []
+
+
+def test_indented_ellipsis_is_not_a_document_marker(tmp_path):
+    """YAML document markers live at column 0.
+
+    A plain scalar folded onto a continuation line whose content happens to be
+    `...` was rejected as a second document, failing a workflow that is
+    entirely hosted.
+    """
+    d = _write(tmp_path, (
+        "jobs:\n"
+        "  build:\n"
+        "    name: This is a job named\n"
+        "      ...\n"
+        "    runs-on: ubuntu-latest\n"
+    ))
+    assert hr.check_all(d) == []
+
+
 def test_document_end_marker_followed_by_more_content_is_rejected(tmp_path):
     # `...` ends a YAML document just as `---` starts one. Checking only for
     # `---` left the same two-document merge open under a different spelling.
