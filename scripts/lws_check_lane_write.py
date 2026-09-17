@@ -182,12 +182,18 @@ def _strip_worktree_prefix(rel: str) -> str:
     if len(parts) <= 2 or parts[0] != WORKTREE_DIR:
         return rel
 
+    # The DEEPEST checkout wins, not the first found. A stale `.git` left
+    # higher up by an earlier worktree would otherwise truncate the path at
+    # the wrong place and deny every write in a live, valid worktree.
+    deepest = None
     for depth in range(2, len(parts)):
         try:
             if (REPO_ROOT.joinpath(*parts[:depth]) / ".git").exists():
-                return "/".join(parts[depth:])
+                deepest = depth
         except OSError:
             break
+    if deepest is not None:
+        return "/".join(parts[deepest:])
     return "/".join(parts[2:])
 
 

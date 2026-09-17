@@ -114,6 +114,10 @@ def classify_path(path: str) -> str:
     # Evaluated only after the lane rules above, so a lane fixture or a
     # test_claude_*/test_codex_* module still wins its lane.
     if "/" not in posix:
+        if posix in ("", ".", ".."):
+            # Not root files: they name no file at all. Calling them shared
+            # would read as "any agent may write here".
+            return "other"
         # A file at the repo root -- build config, ignore rules, the changelog,
         # the licence -- is repo-wide by construction and belongs to no single
         # CLI. SHARED_FILES above is now a subset of this, kept because it is

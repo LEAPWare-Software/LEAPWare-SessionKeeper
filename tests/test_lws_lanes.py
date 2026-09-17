@@ -78,6 +78,14 @@ def test_classify_cli_config_dirs_are_shared_not_owned():
     assert lws_lanes.classify_path(".codex/hooks.json") == "shared"
 
 
+def test_classify_dot_segments_are_not_root_files():
+    # "." and ".." have no "/" in them, so the repo-root rule called them
+    # shared -- which reads as "any agent may write here". Neither names a
+    # file at all, so neither is a root file.
+    for path in (".", "..", ""):
+        assert lws_lanes.classify_path(path) == "other", path
+
+
 def test_classify_other_for_unrelated_path():
     assert lws_lanes.classify_path("examples/policies/example-routing.json") == "other"
 

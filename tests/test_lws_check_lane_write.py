@@ -225,6 +225,28 @@ def test_worktree_prefix_is_found_for_a_branch_name_containing_a_slash(tmp_path,
         ".worktrees/fix/lane-classify/plugins/codex/x.py") == "plugins/codex/x.py"
 
 
+def test_the_deepest_worktree_root_wins(tmp_path, monkeypatch):
+    """A stale `.git` higher up must not truncate the path at the wrong place.
+
+    `.worktrees/fix/.git` left over from an earlier checkout, with the live
+    worktree at `.worktrees/fix/lane-classify`, made the lookup return at the
+    shallower match and yield `lane-classify/plugins/...` -- "other", denying
+    every write in a worktree that is perfectly valid.
+    """
+    import lws_check_lane_write as mod
+
+    fake_root = tmp_path / "repo"
+    stale = fake_root / mod.WORKTREE_DIR / "fix"
+    live = stale / "lane-classify"
+    (live / "plugins" / "codex").mkdir(parents=True)
+    (stale / ".git").write_text("gitdir: stale\n", encoding="utf-8")
+    (live / ".git").write_text("gitdir: live\n", encoding="utf-8")
+
+    monkeypatch.setattr(mod, "REPO_ROOT", fake_root)
+    assert mod._strip_worktree_prefix(
+        ".worktrees/fix/lane-classify/plugins/codex/x.py") == "plugins/codex/x.py"
+
+
 def test_unresolvable_path_fails_closed():
     # None from _relativize means "known to be outside the repo". A path the
     # OS refuses to resolve is not known to be anything, so it must deny.
