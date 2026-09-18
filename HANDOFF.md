@@ -22,53 +22,36 @@ step *n* is done and proven.
 
 1. Work from this repo only. Clone fresh on any machine; no dependence on
    the local environment. **SACRED.**
-2. DONE — bootstrap PR #1 (branch `lws-bootstrap`, everything but the
-   meta-files-only initial commit: core, adapters, plugins, scripts,
-   tests, docs, `.github/`) merged through the merge queue, sha
-   `29d8dd96459e4c08df49810c7dc16fc64791b659`. The repo is now worked
-   from its own Claude session opened in its own folder.
-3. **BLOCKER on everything below.** No open PR can go green: every one
-   touches a shared path, so `lws-lanes` requires BOTH
-   `reviews/<pr>/claude-cto.json` and `reviews/<pr>/codex-cto.json`. The
-   codex record can only be written by a **Codex session** — a Claude
-   session must never author it. Run Codex in its own lane and have its
-   CTO role review PRs #7, #8, #9, #10.
-4. IN FLIGHT — PR #9, lane-classifier fix. Root files, generic `tests/`
-   paths, `.claude/`, `.codex/` and `.worktrees/` all classified "other",
-   which no agent may touch: a rule no commit could satisfy. It blocks
-   PR #8 and any new test file. Land this first.
-5. IN FLIGHT — PR #10, the hosted-runner-only CI check (**directive 18**,
-   which makes directive 9 mechanical): fails on any `runs-on` that is not
-   a GitHub-hosted runner, proven by breaking the repo's own `ci.yml`.
-   Stacked on PR #9 — retarget to `main` and rebase once #9 lands. Its
-   branch must be **squashed before it can ever pass**: the
-   `lws-env-leak-history` step scans every commit a PR adds, and three of
-   its commits carry a string the leak check misreads (see Traps).
-6. BLOCKED on step 3 — PR #8, which removes the owner's private names
-   from `scripts/`. They are public on `main` until it merges.
-7. Create the two GitHub Apps (`lws-claude`, `lws-codex`) from the
-   committed manifests in `.github/apps/`, using a browser-enabled
-   session. Install each on this repo only. Store each private key in the
-   owner's secrets manager, never in the repo. Record App ids in
-   `docs/maintainers/github-apps.md` via PR.
-8. ENTER PLAN MODE (each CLI in its own lane) and build the full plan to
-   ship lws 1.0.0, starting with the complete requirements package per
-   `docs/requirements/approach.md`, seeded by
-   `docs/requirements/owner-directives.md`. Present the plan to the owner
-   for approval before building.
-9. Every deliverable follows `docs/handoff-protocol.md`: proof record,
+2. DONE — bootstrap PR #1 merged. As of 2026-09-18 the mission rewrite
+   (PR #11), the hosted-runner CI check for directive 18 (PR #10), the
+   privacy fix removing the owner's private names from `scripts/`
+   (PR #8), and the master plan (PR #12) have all landed on `main` too.
+   `main` has no open PRs.
+3. **BUILD IS ON HARD HOLD.** The owner directed that LWS adopt the
+   LEAPWare BuildCraft SDLC, and that no LWS implementation start before
+   BuildCraft is ready. BuildCraft today ships only a no-op rule, its
+   gate rules are undesigned, and its own directives file is a
+   placeholder. Confirmed by the owner 2026-09-18. See
+   `docs/requirements/master-plan-1.0.0.md`.
+4. The plan of record is `docs/requirements/master-plan-1.0.0.md`. Only
+   Phase 0 may start; everything from Phase 1 onward is blocked on step 3.
+5. Phase 0 remaining: build the graphify graph for this repo
+   (`graphify install --platform claude` first — the installed skill is
+   0.8.31 against package 0.9.56 — then index), and write the numbered
+   testable requirements list per `docs/requirements/approach.md`.
+6. Every deliverable follows `docs/handoff-protocol.md`: proof record,
    pushed, CI green, alert line `LWS - Alert: <id> DONE ...`. Nothing has
    met that bar yet: `proof/` is empty and no alert has been sent.
 
 <!-- lws-handoff:begin -->
 
-Generated: 2026-09-18 19:27 UTC
-main SHA: 1534421559a56b05baed25aed1abce28d3c9a398
+Generated: 2026-09-18 19:37 UTC
+main SHA: ecd51e31036e53c7665b3eb53a8c4b1ed8cde234
 CLI: unknown
 Session: unknown
 
 Open PRs:
-#12 docs(requirements): master plan for shipping lws 1.0.0 (docs/master-plan-1.0.0)
+(unavailable: no `gh` auth in this environment, or no open PRs)
 
 Deliverable proof state (from proof/):
 (none yet)
@@ -116,3 +99,9 @@ the plan; the commands above are the facts.
   does not prove the list is current — re-read "Generated".
 - Four more, on the CI checks and on sharing a working tree with
   subagents: see "Traps learned" in `docs/handoff-protocol.md`.
+- Delegate-only mode (lw-watchtower) was left ON globally on 2026-09-18.
+  It refuses Edit, Write, NotebookEdit, Bash and PowerShell on the main
+  thread; all work must go through subagents. It cannot be turned off
+  from the main thread. Set `interaction.delegate` to `false` in
+  `config.override.json` under the plugin state directory, or have a
+  subagent run `/lw-watchtower:delegate off`.
