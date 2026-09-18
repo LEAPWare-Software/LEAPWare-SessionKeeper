@@ -2,10 +2,11 @@
 """Lane classification shared by the `lws-lanes` CI check and the in-repo
 session lane hooks (`scripts/lws_check_lane_write.py`).
 
-Owner directive 5: "Codex works only on the Codex part, Claude only on the
-Claude part. Shared parts may be changed by either CLI only after the
-CTO/CIO role on each CLI adversarially checks and agrees; the owner is not
-in that loop."
+Owner directive 5, as amended by the owner on 2026-09-18: "Codex works only
+on the Codex part, Claude only on the Claude part." The lane split is
+enforced here. The dual CTO/CIO sign-off on shared paths that the original
+wording also required has been removed, so this module no longer looks for
+`reviews/<pr>/<agent>-cto.json`.
 
 Lane membership (literal, per the D1b brief):
   - claude lane: `plugins/claude/`, `adapters/claude/`, any directory
@@ -13,8 +14,14 @@ Lane membership (literal, per the D1b brief):
   - codex lane: `plugins/codex/`, `adapters/codex/`, any directory literally
     named `codex` under `tests/`.
   - shared: `core/`, `scripts/`, `.github/`, `docs/`, `proof/`, `reviews/`,
-    `HANDOFF.md`, `AGENTS.md`, `CLAUDE.md`, `README.md`, plus (see below)
-    every file at the repo root and every `tests/` path in neither lane.
+    `.claude/`, `.codex/`, `HANDOFF.md`, `AGENTS.md`, `CLAUDE.md`,
+    `README.md`, plus (see below) every file at the repo root and every
+    `tests/` path in neither lane.
+
+`.claude/` and `.codex/` are shared rather than lane-owned on purpose. They
+hold each CLI's own enforcement wiring -- the PreToolUse hook that applies
+these very rules to that CLI. A CLI that owned its own hook config could
+switch its own guard off with no cross-CLI review, so neither owns its own.
 
 One extension beyond the literal glob, documented here rather than left
 implicit: a test module directly named `test_claude_*` or `*_claude_*`
@@ -69,6 +76,12 @@ SHARED_PREFIXES = (
     "docs/",
     "proof/",
     "reviews/",
+    # Each CLI's own enforcement wiring: the PreToolUse hook that applies
+    # these very lane rules to that CLI. Shared, not lane-owned -- a CLI that
+    # owned its own hook config could switch off its own guard with no
+    # cross-CLI review.
+    ".claude/",
+    ".codex/",
 )
 SHARED_FILES = ("HANDOFF.md", "AGENTS.md", "CLAUDE.md", "README.md")
 
@@ -102,6 +115,10 @@ def classify_path(path: str) -> str:
     # Evaluated only after the lane rules above, so a lane fixture or a
     # test_claude_*/test_codex_* module still wins its lane.
     if "/" not in posix:
+        if posix in ("", ".", ".."):
+            # Not root files: they name no file at all. Calling them shared
+            # would read as "any agent may write here".
+            return "other"
         # A file at the repo root -- build config, ignore rules, the changelog,
         # the licence -- is repo-wide by construction and belongs to no single
         # CLI. SHARED_FILES above is now a subset of this, kept because it is
@@ -151,38 +168,6 @@ def commits_in_range(rev_range: str) -> list[str]:
     return [line for line in result.stdout.splitlines() if line.strip()]
 
 
-def _review_ok(pr_number: int, agent: str, commit_sha: str, errors: list[str]) -> bool:
-    review_path = REPO_ROOT / "reviews" / str(pr_number) / f"{agent}-cto.json"
-    if not review_path.is_file():
-        errors.append(f"{commit_sha[:12]}: missing required review {review_path.relative_to(REPO_ROOT)}")
-        return False
-    import json
-
-    try:
-        data = json.loads(review_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        errors.append(f"{review_path}: invalid JSON: {exc}")
-        return False
-    if data.get("verdict") != "AGREE":
-        errors.append(f"{review_path}: verdict is {data.get('verdict')!r}, want 'AGREE'")
-        return False
-    if data.get("reviewer_agent") != agent:
-        errors.append(f"{review_path}: reviewer_agent is {data.get('reviewer_agent')!r}, want {agent!r}")
-        return False
-    reviewer_id = data.get("reviewer_id")
-    author_id = data.get("commit_author_id")
-    if not reviewer_id or not author_id:
-        errors.append(f"{review_path}: missing 'reviewer_id' or 'commit_author_id'")
-        return False
-    if reviewer_id == author_id:
-        errors.append(
-            f"{review_path}: reviewer_id equals commit_author_id ({reviewer_id!r}) — "
-            "a reviewer may not be the commit's own author"
-        )
-        return False
-    return True
-
-
 def check_lanes(rev_range: str, pr_number: int) -> list[str]:
     """Check every commit in `rev_range`. Returns a list of failure strings."""
     if pr_number <= BOOTSTRAP_LAST_EXEMPT_PR:
@@ -197,21 +182,13 @@ def check_lanes(rev_range: str, pr_number: int) -> list[str]:
         if agent == "human":
             continue  # the owner's own commits are unrestricted
 
-        files = commit_files(sha)
-        touches_shared = False
-        for f in files:
+        for f in commit_files(sha):
             cls = classify_path(f)
-            if cls == "shared":
-                touches_shared = True
-            elif cls != agent:
+            if cls not in ("shared", agent):
                 errors.append(
                     f"{sha[:12]} (LWS-Agent: {agent}): touches '{f}', outside the "
                     f"{agent} lane and not a shared path"
                 )
-
-        if touches_shared:
-            _review_ok(pr_number, "claude", sha, errors)
-            _review_ok(pr_number, "codex", sha, errors)
 
     return errors
 

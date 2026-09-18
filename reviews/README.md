@@ -1,13 +1,25 @@
 # reviews/
 
+> **Not enforced any more.** The owner removed the dual CTO/CIO sign-off on
+> 2026-09-18 (see directive 5). `scripts/lws_lanes.py` no longer looks for
+> these files, and no PR is blocked by a missing one. Existing records are
+> kept as history, and writing one is still welcome as evidence that a
+> shared-path change was reviewed — it just gates nothing.
+>
+> The lane split itself still stands and is still enforced: Codex may not
+> edit Claude's lane, and Claude may not edit Codex's.
+
+The rest of this file describes the retired gate.
+
 Adversarial cross-CLI review records for a shared-path change, per owner
 directive 5 and `scripts/lws_lanes.py`.
 
-## When a review is required
+## When a review was required
 
 Any commit (with an `LWS-Agent: claude` or `LWS-Agent: codex` trailer,
 never `human`) that touches a shared path — `core/`, `scripts/`, `.github/`,
-`docs/`, `proof/`, `reviews/`, any file at the repo root (`HANDOFF.md`,
+`docs/`, `proof/`, `reviews/`, `.claude/`, `.codex/`, any file at the repo
+root (`HANDOFF.md`,
 `AGENTS.md`, `CLAUDE.md`, `README.md`, `.gitignore`, `pyproject.toml`, ...),
 and any `tests/` path belonging to neither CLI's lane — needs BOTH
 `reviews/<pr>/claude-cto.json` and

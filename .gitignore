@@ -44,6 +44,11 @@ id_ed25519*
 *.bak
 *.local.json
 
+# adopter-supplied needles for scripts/lws_check_env_leak.py and
+# scripts/lws_handoff.py -- never committed, that would recreate the exact
+# leak these checks exist to catch.
+.private-names
+
 # editors / OS
 .vscode/
 .idea/
