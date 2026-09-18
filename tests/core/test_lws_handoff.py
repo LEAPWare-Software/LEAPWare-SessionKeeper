@@ -284,6 +284,29 @@ def test_check_prs_live_extra_closed_pr_fails(monkeypatch):
     assert any("extra" in e and "99" in e for e in errors)
 
 
+def test_check_prs_live_excludes_own_pr_number(monkeypatch):
+    """A block committed before its own PR exists cannot have listed it --
+    exclude_pr / --pr-number excuses exactly that number, not any other."""
+    monkeypatch.setattr(lws_handoff, "_run_gh_strict", lambda args: '[{"number": 15}]')
+    errors = lws_handoff._check_prs_live(lws_handoff.NONE_OPEN_MARKER, exclude_pr=15)
+    assert errors == []
+
+
+def test_check_prs_live_excludes_own_pr_number_even_if_committed_names_it(monkeypatch):
+    """A later --write run in the same PR sees gh already reporting the PR
+    as open and may commit its own number -- that must not be flagged as
+    "extra" either."""
+    monkeypatch.setattr(lws_handoff, "_run_gh_strict", lambda args: '[{"number": 15}]')
+    errors = lws_handoff._check_prs_live("#15 title (branch)", exclude_pr=15)
+    assert errors == []
+
+
+def test_check_prs_live_excluding_own_pr_still_catches_other_missing(monkeypatch):
+    monkeypatch.setattr(lws_handoff, "_run_gh_strict", lambda args: '[{"number": 15}, {"number": 20}]')
+    errors = lws_handoff._check_prs_live(lws_handoff.NONE_OPEN_MARKER, exclude_pr=15)
+    assert any("missing" in e and "20" in e for e in errors)
+
+
 def test_check_prs_live_none_open_matches_passes(monkeypatch):
     monkeypatch.setattr(lws_handoff, "_run_gh_strict", lambda args: "[]")
     errors = lws_handoff._check_prs_live(lws_handoff.NONE_OPEN_MARKER)

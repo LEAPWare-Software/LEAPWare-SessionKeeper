@@ -78,9 +78,13 @@ jobs:
         # PR-only: this needs `gh` authenticated (GH_TOKEN below) and a
         # meaningful origin/main to diff the committed block's main SHA and
         # open-PR list against -- neither is guaranteed outside a PR run.
+        # --pr-number excuses this PR's own number from the open-PR
+        # comparison: HANDOFF.md's block is generated and committed before
+        # its own PR exists, so it can never have listed it -- same
+        # reasoning as the SHA lag, applied to PR numbers.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python scripts/lws_handoff.py --check-live
+        run: python scripts/lws_handoff.py --check-live --pr-number ${{ github.event.pull_request.number }}
 
       - name: lws-commit-identity (LEAPWare or an allow-listed bot only)
         if: github.event_name == 'pull_request'

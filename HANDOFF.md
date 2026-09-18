@@ -45,13 +45,13 @@ step *n* is done and proven.
 
 <!-- lws-handoff:begin -->
 
-Generated: 2026-09-18 19:50 UTC
+Generated: 2026-09-18 19:55 UTC
 main SHA: 90e719855ccce31612ca8e38c7d36a390955332f
 CLI: claude
 Session: fix-handoff-check-verifies-facts
 
 Open PRs:
-(none open)
+#15 fix(handoff): make the check verify the block's facts, not just its shape (fix/handoff-check-verifies-facts)
 
 Deliverable proof state (from proof/):
 (none yet)
