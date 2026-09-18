@@ -20,7 +20,7 @@ real Windows Task Scheduler rehearsal, and a 15/15 mutation-kill pass.
 ### BUILD IS ON HARD HOLD
 
 The owner directed that LWS adopt the **LEAPWare BuildCraft SDLC**
-(`leapware-hq\leapware-software\leapware-buildcraft`) and that **no LWS
+(`LEAPWare-BuildCraft`) and that **no LWS
 implementation begins until BuildCraft is ready**. On inspection BuildCraft ships
 only a no-op `lwb_version` rule; its stage/role/gate rules are undesigned, its
 owner-directives file is a placeholder, every mode is warn-only until its own 1.1,
@@ -98,10 +98,9 @@ repo's own CI plus a proof record per directive 7.
 
 **Stage:** design. **Gate:** all four open PRs merged; BuildCraft hold resolved.
 
-- [ ] Land the open PRs in order: **#11** (mission), **#9** ✅ merged, **#10**
-      (hosted-runner check — needs rebase onto `main` + **squash**, its
-      `lws-env-leak-history` step scans every commit), **#8** (privacy fix — owner's
-      private names are public on `main` until it lands), **#7** (HANDOFF).
+PR-landing work is complete as of 2026-09-18: #7, #8, #9, #10, #11, #12, #13, and
+#14 are all merged; `main` has no open PRs.
+
 - [ ] Build the graphify graph for this repo (`graphify install --platform claude`
       first — installed skill is 0.8.31 against package 0.9.56 — then index).
 - [ ] Write the **numbered testable requirements list** per

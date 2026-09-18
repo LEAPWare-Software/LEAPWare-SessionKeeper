@@ -121,7 +121,7 @@ def test_cmd_write_regenerates_only_the_block(tmp_path, monkeypatch):
     path.write_text(_valid_text(), encoding="utf-8")
     monkeypatch.setattr(lws_handoff, "HANDOFF_PATH", path)
     monkeypatch.setattr(lws_handoff, "_run_git", lambda args: "cafef00d")
-    monkeypatch.setattr(lws_handoff, "_run_gh", lambda args: "")
+    monkeypatch.setattr(lws_handoff, "_run_gh_with_status", lambda args: (True, ""))
 
     before = path.read_text(encoding="utf-8")
     prose_before = before.split(lws_handoff.BEGIN_MARKER)[0]
@@ -150,7 +150,7 @@ def test_cmd_write_records_cli_and_session(tmp_path, monkeypatch):
     monkeypatch.setattr(lws_handoff, "HANDOFF_PATH", path)
     monkeypatch.setattr(lws_handoff, "PROOF_DIR", tmp_path / "no-such-proof-dir")
     monkeypatch.setattr(lws_handoff, "_run_git", lambda args: "cafef00d")
-    monkeypatch.setattr(lws_handoff, "_run_gh", lambda args: "")
+    monkeypatch.setattr(lws_handoff, "_run_gh_with_status", lambda args: (True, ""))
 
     assert lws_handoff.cmd_write(cli="claude", session="sess-123") == 0
 
@@ -165,7 +165,7 @@ def test_cmd_write_defaults_cli_and_session_to_unknown(tmp_path, monkeypatch):
     monkeypatch.setattr(lws_handoff, "HANDOFF_PATH", path)
     monkeypatch.setattr(lws_handoff, "PROOF_DIR", tmp_path / "no-such-proof-dir")
     monkeypatch.setattr(lws_handoff, "_run_git", lambda args: "cafef00d")
-    monkeypatch.setattr(lws_handoff, "_run_gh", lambda args: "")
+    monkeypatch.setattr(lws_handoff, "_run_gh_with_status", lambda args: (True, ""))
 
     assert lws_handoff.cmd_write() == 0
 
@@ -187,7 +187,7 @@ def test_cmd_write_lists_deliverable_proof_state(tmp_path, monkeypatch):
     monkeypatch.setattr(lws_handoff, "HANDOFF_PATH", path)
     monkeypatch.setattr(lws_handoff, "PROOF_DIR", proof_dir)
     monkeypatch.setattr(lws_handoff, "_run_git", lambda args: "cafef00d")
-    monkeypatch.setattr(lws_handoff, "_run_gh", lambda args: "")
+    monkeypatch.setattr(lws_handoff, "_run_gh_with_status", lambda args: (True, ""))
 
     assert lws_handoff.cmd_write() == 0
 
@@ -203,7 +203,7 @@ def test_cmd_write_reports_no_proof_records_yet(tmp_path, monkeypatch):
     monkeypatch.setattr(lws_handoff, "HANDOFF_PATH", path)
     monkeypatch.setattr(lws_handoff, "PROOF_DIR", proof_dir)
     monkeypatch.setattr(lws_handoff, "_run_git", lambda args: "cafef00d")
-    monkeypatch.setattr(lws_handoff, "_run_gh", lambda args: "")
+    monkeypatch.setattr(lws_handoff, "_run_gh_with_status", lambda args: (True, ""))
 
     assert lws_handoff.cmd_write() == 0
 
@@ -216,3 +216,171 @@ def test_real_handoff_md_passes_check():
     monkeypatch_path = REPO_ROOT / "HANDOFF.md"
     text = monkeypatch_path.read_text(encoding="utf-8")
     assert lws_handoff._validate(text) == []
+
+
+# --- --check-live: re-derives the generated block's facts against git/gh ---
+
+
+def _live_text(main_sha: str, open_prs: str) -> str:
+    return (
+        "# HANDOFF\n\n"
+        "## Start of session\n- [ ] read this\n\n"
+        "## In flight\n1. do the thing\n\n"
+        f"{lws_handoff.BEGIN_MARKER}\nGenerated: 2026-09-17 00:00 UTC\n"
+        f"main SHA: {main_sha}\n\nOpen PRs:\n{open_prs}\n\n{lws_handoff.END_MARKER}\n\n"
+        "## Re-derive state\n```\ngit status\n```\n\n"
+        "## Hard rules\n- stdlib only\n\n"
+        "## Traps\n- none yet\n"
+    )
+
+
+def test_extract_main_sha():
+    text = _live_text("deadbeef", "(none open)")
+    assert lws_handoff._extract_main_sha(text) == "deadbeef"
+
+
+def test_extract_pr_numbers():
+    section = "#11 some title (branch)\n#12 another (branch2)"
+    assert lws_handoff._extract_pr_numbers(section) == {11, 12}
+
+
+def test_check_sha_live_tip_passes(monkeypatch):
+    monkeypatch.setattr(lws_handoff, "_run_git_strict", lambda args: "tip-sha")
+    assert lws_handoff._check_sha_live("tip-sha") == []
+
+
+def test_check_sha_live_one_commit_behind_passes(monkeypatch):
+    monkeypatch.setattr(lws_handoff, "_run_git_strict", lambda args: "tip-sha")
+    monkeypatch.setattr(lws_handoff, "_git_is_ancestor", lambda candidate, ref: True)
+    monkeypatch.setattr(lws_handoff, "_git_distance", lambda candidate, ref: 1)
+    errors = lws_handoff._check_sha_live("parent-sha")
+    assert errors == []
+
+
+def test_check_sha_live_six_behind_fails(monkeypatch):
+    monkeypatch.setattr(lws_handoff, "_run_git_strict", lambda args: "tip-sha")
+    monkeypatch.setattr(lws_handoff, "_git_is_ancestor", lambda candidate, ref: True)
+    monkeypatch.setattr(lws_handoff, "_git_distance", lambda candidate, ref: 6)
+    errors = lws_handoff._check_sha_live("stale-sha")
+    assert any("stale" in e or "behind" in e for e in errors)
+
+
+def test_check_sha_live_not_an_ancestor_fails(monkeypatch):
+    monkeypatch.setattr(lws_handoff, "_run_git_strict", lambda args: "tip-sha")
+    monkeypatch.setattr(lws_handoff, "_git_is_ancestor", lambda candidate, ref: False)
+    errors = lws_handoff._check_sha_live("unrelated-sha")
+    assert any("ancestor" in e for e in errors)
+
+
+def test_check_prs_live_missing_open_pr_fails(monkeypatch):
+    monkeypatch.setattr(lws_handoff, "_run_gh_strict", lambda args: '[{"number": 11}, {"number": 12}]')
+    errors = lws_handoff._check_prs_live("#11 title (branch)")
+    assert any("missing" in e and "12" in e for e in errors)
+
+
+def test_check_prs_live_extra_closed_pr_fails(monkeypatch):
+    monkeypatch.setattr(lws_handoff, "_run_gh_strict", lambda args: '[{"number": 11}]')
+    errors = lws_handoff._check_prs_live("#11 title (branch)\n#99 stale (branch2)")
+    assert any("extra" in e and "99" in e for e in errors)
+
+
+def test_check_prs_live_none_open_matches_passes(monkeypatch):
+    monkeypatch.setattr(lws_handoff, "_run_gh_strict", lambda args: "[]")
+    errors = lws_handoff._check_prs_live(lws_handoff.NONE_OPEN_MARKER)
+    assert errors == []
+
+
+def test_check_prs_live_unknown_marker_always_fails(monkeypatch):
+    monkeypatch.setattr(
+        lws_handoff, "_run_gh_strict", lambda args: (_ for _ in ()).throw(AssertionError("gh must not be called"))
+    )
+    errors = lws_handoff._check_prs_live(lws_handoff.UNKNOWN_PR_MARKER)
+    assert any("UNKNOWN" in e or "not trustworthy" in e for e in errors)
+
+
+def test_run_git_strict_raises_when_git_missing(monkeypatch):
+    def _boom(*args, **kwargs):
+        raise FileNotFoundError("git not found")
+
+    monkeypatch.setattr(lws_handoff.subprocess, "run", _boom)
+    with pytest.raises(lws_handoff.LiveCheckError):
+        lws_handoff._run_git_strict(["rev-parse", "origin/main"])
+
+
+def test_run_gh_strict_raises_on_nonzero_exit(monkeypatch):
+    class _Result:
+        returncode = 1
+        stdout = ""
+        stderr = "not authenticated"
+
+    monkeypatch.setattr(lws_handoff.subprocess, "run", lambda *a, **k: _Result())
+    with pytest.raises(lws_handoff.LiveCheckError):
+        lws_handoff._run_gh_strict(["pr", "list"])
+
+
+def test_cmd_check_live_passes_end_to_end(tmp_path, monkeypatch, capsys):
+    path = tmp_path / "HANDOFF.md"
+    path.write_text(_live_text("tip-sha", "(none open)"), encoding="utf-8")
+    protocol_path = tmp_path / "handoff-protocol.md"
+    protocol_path.write_text("short", encoding="utf-8")
+    monkeypatch.setattr(lws_handoff, "HANDOFF_PATH", path)
+    monkeypatch.setattr(lws_handoff, "HANDOFF_PROTOCOL_PATH", protocol_path)
+    monkeypatch.setattr(lws_handoff, "_run_git_strict", lambda args: "tip-sha")
+    monkeypatch.setattr(lws_handoff, "_run_gh_strict", lambda args: "[]")
+
+    assert lws_handoff.cmd_check_live() == 0
+    assert "OK" in capsys.readouterr().out
+
+
+def test_cmd_check_live_fails_on_sha_mismatch(tmp_path, monkeypatch, capsys):
+    path = tmp_path / "HANDOFF.md"
+    path.write_text(_live_text("very-stale-sha", "(none open)"), encoding="utf-8")
+    protocol_path = tmp_path / "handoff-protocol.md"
+    protocol_path.write_text("short", encoding="utf-8")
+    monkeypatch.setattr(lws_handoff, "HANDOFF_PATH", path)
+    monkeypatch.setattr(lws_handoff, "HANDOFF_PROTOCOL_PATH", protocol_path)
+    monkeypatch.setattr(lws_handoff, "_run_git_strict", lambda args: "tip-sha")
+    monkeypatch.setattr(lws_handoff, "_git_is_ancestor", lambda candidate, ref: False)
+    monkeypatch.setattr(lws_handoff, "_run_gh_strict", lambda args: "[]")
+
+    assert lws_handoff.cmd_check_live() == 1
+    err = capsys.readouterr().err
+    assert "very-stale-sha" in err and "tip-sha" in err
+
+
+def test_cmd_check_live_fails_loudly_when_gh_unavailable(tmp_path, monkeypatch, capsys):
+    path = tmp_path / "HANDOFF.md"
+    path.write_text(_live_text("tip-sha", "(none open)"), encoding="utf-8")
+    protocol_path = tmp_path / "handoff-protocol.md"
+    protocol_path.write_text("short", encoding="utf-8")
+    monkeypatch.setattr(lws_handoff, "HANDOFF_PATH", path)
+    monkeypatch.setattr(lws_handoff, "HANDOFF_PROTOCOL_PATH", protocol_path)
+    monkeypatch.setattr(lws_handoff, "_run_git_strict", lambda args: "tip-sha")
+
+    def _boom(args):
+        raise lws_handoff.LiveCheckError("gh not authenticated")
+
+    monkeypatch.setattr(lws_handoff, "_run_gh_strict", _boom)
+
+    assert lws_handoff.cmd_check_live() == 1
+    assert "could not get authoritative state" in capsys.readouterr().err
+
+
+# --- Fix 4: docs/handoff-protocol.md size cap ---
+
+
+def test_handoff_protocol_over_cap_fails(tmp_path, monkeypatch, capsys):
+    path = tmp_path / "HANDOFF.md"
+    path.write_text(_valid_text(), encoding="utf-8")
+    protocol_path = tmp_path / "handoff-protocol.md"
+    protocol_path.write_text("x" * (lws_handoff.HANDOFF_PROTOCOL_CAP_BYTES + 1), encoding="utf-8")
+    monkeypatch.setattr(lws_handoff, "HANDOFF_PATH", path)
+    monkeypatch.setattr(lws_handoff, "HANDOFF_PROTOCOL_PATH", protocol_path)
+
+    assert lws_handoff.cmd_check() == 1
+    assert "handoff-protocol.md" in capsys.readouterr().err
+
+
+def test_real_handoff_protocol_under_cap():
+    text = (REPO_ROOT / "docs" / "handoff-protocol.md").read_text(encoding="utf-8")
+    assert len(text.encode("utf-8")) <= lws_handoff.HANDOFF_PROTOCOL_CAP_BYTES

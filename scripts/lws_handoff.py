@@ -8,6 +8,11 @@ wrote by hand and this script never touches.
 
 Usage:
     python scripts/lws_handoff.py --check                      # validate HANDOFF.md, exit 1 on failure
+    python scripts/lws_handoff.py --check-live
+        # --check, plus re-derive the generated block's own facts (main SHA,
+        # open PR list) from live git/gh and fail loudly on mismatch or on
+        # git/gh being unavailable. PR-only in CI: needs `gh` auth and a
+        # meaningful origin/main to diff against.
     python scripts/lws_handoff.py --write [--cli NAME] [--session ID]
         # regenerate the generated block in place. --cli and --session
         # record which CLI/session wrote this handoff and its own id, so a
@@ -41,8 +46,35 @@ if str(_SCRIPTS_DIR) not in sys.path:
 
 SIZE_CAP_BYTES = 6000
 
+HANDOFF_PROTOCOL_PATH = REPO_ROOT / "docs" / "handoff-protocol.md"
+# Generous on purpose: this is the designated overflow target when
+# HANDOFF.md itself hits its own (tighter) cap, so it needs headroom -- the
+# point of this cap is only to stop unbounded growth going unnoticed, not
+# to force trimming at the same size as HANDOFF.md.
+HANDOFF_PROTOCOL_CAP_BYTES = 12000
+
 BEGIN_MARKER = "<!-- lws-handoff:begin -->"
 END_MARKER = "<!-- lws-handoff:end -->"
+
+# Two textually unmistakable forms for the "Open PRs:" section -- see
+# _generate_block(). Never write anything else there for the zero/unknown
+# cases; --check-live matches on these exact strings.
+NONE_OPEN_MARKER = "(none open)"
+UNKNOWN_PR_MARKER = "(UNKNOWN - gh unavailable, this block is not trustworthy)"
+
+# A block generated immediately before its own commit can only ever name
+# the commit's *parent* as "main SHA" -- _generate_block() runs, then the
+# result is committed, so the commit that ships the block is necessarily
+# one commit ahead of what the block itself could have observed. Exact
+# equality between the committed SHA and origin/main's live tip would
+# therefore fail on every single legitimate PR. MAX_SHA_LAG bounds how far
+# behind is still "current when generated" rather than "stale": an ancestor
+# within this many commits of the tip passes, anything further behind (or
+# not an ancestor at all -- a rewritten/force-pushed history) fails.
+MAX_SHA_LAG = 5
+
+_MAIN_SHA_RE = re.compile(r"^main SHA:\s*(\S+)\s*$", re.MULTILINE)
+_PR_NUMBER_RE = re.compile(r"#(\d+)")
 
 REQUIRED_SECTIONS = [
     "# HANDOFF",
@@ -94,6 +126,15 @@ class ValidationError(Exception):
     """Raised by _validate() with a human-readable reason."""
 
 
+class LiveCheckError(Exception):
+    """Raised by --check-live's strict git/gh helpers when authoritative
+    state cannot be obtained at all (git/gh missing, gh unauthenticated,
+    gh timed out, unparseable output). --check-live must fail loudly on
+    this, never degrade to "unavailable" -- silently degrading is the
+    exact defect this mode exists to catch.
+    """
+
+
 def _run_git(args: list[str]) -> str:
     result = subprocess.run(
         ["git", *args],
@@ -105,7 +146,11 @@ def _run_git(args: list[str]) -> str:
     return result.stdout.strip()
 
 
-def _run_gh(args: list[str]) -> str:
+def _run_gh_with_status(args: list[str]) -> tuple[bool, str]:
+    """(ok, stdout). ok is False for "gh missing/timed out/nonzero exit" --
+    the only way to tell that apart from "gh ran fine and printed nothing",
+    which _run_gh() below collapses to the same "" and which is exactly the
+    ambiguity FIX 2 removes from the committed block."""
     try:
         result = subprocess.run(
             ["gh", *args],
@@ -116,10 +161,154 @@ def _run_gh(args: list[str]) -> str:
             timeout=30,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        return ""
+        return False, ""
     if result.returncode != 0:
-        return ""
+        return False, ""
+    return True, result.stdout.strip()
+
+
+def _run_gh(args: list[str]) -> str:
+    _ok, stdout = _run_gh_with_status(args)
+    return stdout
+
+
+def _run_git_strict(args: list[str]) -> str:
+    """Like _run_git, but raises LiveCheckError instead of degrading. Only
+    used by --check-live, which must fail loudly rather than silently
+    passing on missing/broken git."""
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise LiveCheckError(f"git is not available: {exc}") from exc
+    if result.returncode != 0:
+        raise LiveCheckError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
     return result.stdout.strip()
+
+
+def _run_gh_strict(args: list[str]) -> str:
+    """Like _run_gh, but raises LiveCheckError instead of degrading. Only
+    used by --check-live, which must fail loudly rather than silently
+    passing on missing/unauthenticated gh."""
+    try:
+        result = subprocess.run(
+            ["gh", *args],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        raise LiveCheckError(f"gh is not available or timed out: {exc}") from exc
+    if result.returncode != 0:
+        raise LiveCheckError(f"gh {' '.join(args)} failed: {result.stderr.strip()}")
+    return result.stdout.strip()
+
+
+def _git_is_ancestor(candidate: str, ref: str) -> bool:
+    try:
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", candidate, ref],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise LiveCheckError(f"git is not available: {exc}") from exc
+    return result.returncode == 0
+
+
+def _git_distance(candidate: str, ref: str) -> int:
+    """Number of commits ref has that candidate does not -- how far behind
+    candidate is. Raises LiveCheckError if git or its output is unusable."""
+    raw = _run_git_strict(["rev-list", "--count", f"{candidate}..{ref}"])
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise LiveCheckError(f"could not parse commit distance from 'git rev-list --count': {raw!r}") from exc
+
+
+def _extract_main_sha(text: str) -> str | None:
+    match = _MAIN_SHA_RE.search(text)
+    return match.group(1) if match else None
+
+
+def _extract_open_pr_section(text: str) -> str:
+    """The text of the "Open PRs:" section: from that heading up to the
+    next blank line (the block always writes one blank line before the
+    following section -- see _generate_block())."""
+    marker = "Open PRs:"
+    idx = text.index(marker)
+    rest = text[idx + len(marker):]
+    end = rest.index("\n\n") if "\n\n" in rest else len(rest)
+    return rest[:end].strip()
+
+
+def _extract_pr_numbers(section: str) -> set[int]:
+    return {int(m) for m in _PR_NUMBER_RE.findall(section)}
+
+
+def _check_sha_live(committed_sha: str) -> list[str]:
+    """Re-derive origin/main's tip and compare it against the SHA committed
+    in HANDOFF.md's generated block. See MAX_SHA_LAG for why exact equality
+    is wrong."""
+    tip = _run_git_strict(["rev-parse", "origin/main"])
+    if committed_sha == tip:
+        return []
+    if not _git_is_ancestor(committed_sha, tip):
+        return [
+            f"committed main SHA {committed_sha!r} is not origin/main's tip {tip!r}, "
+            "and not an ancestor of it either (rewritten history, or the wrong SHA entirely) "
+            "-- HANDOFF.md's generated block is wrong"
+        ]
+    distance = _git_distance(committed_sha, tip)
+    if distance > MAX_SHA_LAG:
+        return [
+            f"committed main SHA {committed_sha!r} is {distance} commits behind origin/main's tip {tip!r}, "
+            f"more than the {MAX_SHA_LAG}-commit structural lag allowance -- the block is stale"
+        ]
+    return []
+
+
+def _check_prs_live(section_text: str) -> list[str]:
+    """Re-derive the live set of open PR numbers and compare it against
+    the numbers named in HANDOFF.md's "Open PRs:" section."""
+    if UNKNOWN_PR_MARKER in section_text:
+        return [
+            "HANDOFF.md's Open PRs section is the UNKNOWN/gh-unavailable form -- "
+            "it says itself it is not trustworthy, so --check-live treats it as a failure"
+        ]
+    committed = _extract_pr_numbers(section_text)
+    raw = _run_gh_strict(["pr", "list", "--state", "open", "--json", "number"])
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise LiveCheckError(f"could not parse 'gh pr list' JSON output: {exc}") from exc
+    live = {int(item["number"]) for item in parsed}
+    extra = sorted(committed - live)
+    missing = sorted(live - committed)
+    if extra or missing:
+        return [
+            "HANDOFF.md's Open PRs section does not match origin's actual open PRs -- "
+            f"extra (committed but not actually open): {extra}, missing (open but not committed): {missing}"
+        ]
+    return []
+
+
+def _check_protocol_cap() -> list[str]:
+    if not HANDOFF_PROTOCOL_PATH.exists():
+        return []
+    size = len(HANDOFF_PROTOCOL_PATH.read_bytes())
+    if size > HANDOFF_PROTOCOL_CAP_BYTES:
+        return [f"{HANDOFF_PROTOCOL_PATH} is {size} bytes, over the {HANDOFF_PROTOCOL_CAP_BYTES}-byte cap"]
+    return []
 
 
 def _utc_now_iso() -> str:
@@ -173,7 +362,7 @@ def _generate_block(cli: str = "unknown", session: str = "unknown") -> str:
     main_sha = _run_git(["rev-parse", "origin/main"]) or _run_git(["rev-parse", "main"]) or "unknown"
     generated_at = _utc_now_iso()
 
-    pr_list = _run_gh(
+    ok, pr_list = _run_gh_with_status(
         [
             "pr",
             "list",
@@ -185,8 +374,15 @@ def _generate_block(cli: str = "unknown", session: str = "unknown") -> str:
             "{{range .}}#{{.number}} {{.title}} ({{.headRefName}})\n{{end}}",
         ]
     )
-    if not pr_list:
-        pr_list = "(unavailable: no `gh` auth in this environment, or no open PRs)"
+    # Two textually unmistakable outcomes -- never the old ambiguous
+    # "(unavailable: ... or no open PRs)", which cannot be told apart from
+    # a genuinely empty list and caused a stale block to pass unnoticed.
+    if not ok:
+        pr_section = UNKNOWN_PR_MARKER
+    elif pr_list.strip():
+        pr_section = pr_list.strip()
+    else:
+        pr_section = NONE_OPEN_MARKER
 
     lines = [
         BEGIN_MARKER,
@@ -197,7 +393,7 @@ def _generate_block(cli: str = "unknown", session: str = "unknown") -> str:
         f"Session: {session}",
         "",
         "Open PRs:",
-        pr_list.strip() if pr_list.strip() else "(none)",
+        pr_section,
         "",
         "Deliverable proof state (from proof/):",
         *_proof_state_lines(),
@@ -248,11 +444,44 @@ def cmd_check() -> int:
         return 1
     text = HANDOFF_PATH.read_text(encoding="utf-8")
     errors = _validate(text)
+    errors.extend(_check_protocol_cap())
     if errors:
         for error in errors:
             print(f"FAIL: {error}", file=sys.stderr)
         return 1
     print(f"OK: {HANDOFF_PATH} passes all checks ({len(text.encode('utf-8'))} bytes)")
+    return 0
+
+
+def cmd_check_live() -> int:
+    """Everything --check does, plus re-deriving the generated block's own
+    facts (main SHA, open PR list) from live git/gh state and failing on
+    mismatch. Unlike --check, this must fail loudly rather than degrade
+    when git/gh are unavailable -- see LiveCheckError."""
+    base_rc = cmd_check()
+    if base_rc != 0:
+        return base_rc
+
+    text = HANDOFF_PATH.read_text(encoding="utf-8")
+    errors: list[str] = []
+    try:
+        main_sha = _extract_main_sha(text)
+        if main_sha is None:
+            errors.append("could not find a 'main SHA:' line in HANDOFF.md's generated block")
+        else:
+            errors.extend(_check_sha_live(main_sha))
+
+        pr_section = _extract_open_pr_section(text)
+        errors.extend(_check_prs_live(pr_section))
+    except LiveCheckError as exc:
+        print(f"FAIL: --check-live could not get authoritative state: {exc}", file=sys.stderr)
+        return 1
+
+    if errors:
+        for error in errors:
+            print(f"FAIL: {error}", file=sys.stderr)
+        return 1
+    print("OK: HANDOFF.md's generated block matches live git/gh state")
     return 0
 
 
@@ -282,6 +511,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--check", action="store_true", help="validate HANDOFF.md, exit 1 on failure")
+    group.add_argument(
+        "--check-live",
+        action="store_true",
+        help="--check, plus re-derive the block's main SHA and open-PR list from git/gh and fail on mismatch",
+    )
     group.add_argument("--write", action="store_true", help="regenerate the generated block in place")
     parser.add_argument(
         "--cli", default="unknown", help="which CLI is writing this handoff, e.g. claude or codex"
@@ -293,6 +527,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.check:
         return cmd_check()
+    if args.check_live:
+        return cmd_check_live()
     return cmd_write(cli=args.cli, session=args.session)
 
 
