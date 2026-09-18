@@ -54,21 +54,40 @@ REQUIRED_SECTIONS = [
 ]
 
 # Patterns that must never appear in a committed HANDOFF.md: an absolute
-# path (POSIX or a Windows drive letter) or a real person's name/account
-# fragment. This keeps the file honest about SACRED (no local-environment
-# dependence) and keeps a human identity out of a machine-read file.
+# path (POSIX or a Windows drive letter) or a forbidden substring (see
+# _forbidden_substrings() below). This keeps the file honest about SACRED
+# (no local-environment dependence) and keeps a private identity out of a
+# machine-read file.
 FORBIDDEN_PATTERNS = [
     re.compile(r"[A-Za-z]:\\"),  # Windows drive letter, e.g. C:\
     re.compile(r"(?<!\w)/(?:Users|home)/\w+"),  # POSIX home directory
 ]
 
-FORBIDDEN_SUBSTRINGS = [
-    "manny",
-    "ramos",
-    "followoz",
-    "leapware-cpt",
-    "leapware-financial",
-]
+# Generic default: nothing here names a real project or person. An adopter
+# who forks/installs this repo supplies their own needles via a local,
+# gitignored file (PRIVATE_NAMES_FILE, shared with scripts/lws_check_env_leak.py)
+# rather than committing them here -- committing them would recreate the
+# exact leak this check exists to catch.
+DEFAULT_FORBIDDEN_SUBSTRINGS = ["example-private-project"]
+
+PRIVATE_NAMES_FILE = ".private-names"
+
+
+def _forbidden_substrings() -> list[str]:
+    """DEFAULT_FORBIDDEN_SUBSTRINGS plus any needles from a local,
+    gitignored `.private-names` file at REPO_ROOT (one per line, blank
+    lines and `#`-comments ignored). Absent file: default only.
+    """
+    names = list(DEFAULT_FORBIDDEN_SUBSTRINGS)
+    try:
+        text = (REPO_ROOT / PRIVATE_NAMES_FILE).read_text(encoding="utf-8")
+    except OSError:
+        return names
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            names.append(stripped.lower())
+    return names
 
 
 class ValidationError(Exception):
@@ -216,7 +235,7 @@ def _validate(text: str) -> list[str]:
             errors.append(f"forbidden pattern found (absolute path): {pattern.pattern!r}")
 
     lowered = text.lower()
-    for needle in FORBIDDEN_SUBSTRINGS:
+    for needle in _forbidden_substrings():
         if needle in lowered:
             errors.append(f"forbidden substring found: {needle!r}")
 

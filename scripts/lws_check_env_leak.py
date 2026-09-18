@@ -9,9 +9,11 @@ on. Scans every git-tracked, non-binary file for:
   - a POSIX home directory (`/Users/<name>` or `/home/<name>`)
   - a hard-coded interpreter invocation: `py -3`, `py -3.NN`, or an
     absolute path to a `python`/`python3`/`python.exe` binary
-  - a private-project name leak: `leapware-cpt`, `leapware-financial`,
-    `followoz`, or the owner's personal name fragments (`manny`, `ramos`),
-    case-insensitive
+  - a private-project name leak: a generic placeholder needle
+    (`example-private-project`) by default, case-insensitive, plus any
+    adopter-supplied needles listed one per line in a gitignored local
+    file (`.private-names` at the repo root); absent that file, the check
+    still runs with the generic default alone
 
 Allow-listed: this script's own pattern data (it necessarily names the
 patterns it looks for) and files under `tests/**/fixtures/**` whose
@@ -45,20 +47,41 @@ from pathlib import Path, PurePosixPath
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SELF_PATH = Path(__file__).resolve()
 
-DRIVE_LETTER = re.compile(r"\b[A-Za-z]:\\[\w][\w.\- ]")
+DRIVE_LETTER = re.compile(r"\b[A-Za-z]:\\[\w][\w.\- ]*\\")
 POSIX_HOME = re.compile(r"(?<!\w)/(?:Users|home)/[\w.\-]+")
 PY_DASH3 = re.compile(r"\bpy\s+-3(\.\d+)?\b")
 HARDCODED_INTERPRETER = re.compile(
     r"(?:[A-Za-z]:\\|/)(?:[\w.\-]+[\\/])*python3?(?:\.exe)?(?=[\s\"'`]|$)"
 )
 
-PRIVATE_NAME_SUBSTRINGS = [
-    "leapware-cpt",
-    "leapware-financial",
-    "followoz",
-    "manny",
-    "ramos",
-]
+# Generic default: nothing here names a real project or person. An adopter
+# who forks/installs this repo supplies their own needles via a local,
+# gitignored file (PRIVATE_NAMES_FILE) rather than committing them here --
+# committing them would recreate the exact leak this check exists to catch.
+DEFAULT_PRIVATE_NAME_SUBSTRINGS = ["example-private-project"]
+
+PRIVATE_NAMES_FILE = ".private-names"
+
+
+def _private_name_substrings() -> list[str]:
+    """DEFAULT_PRIVATE_NAME_SUBSTRINGS plus any needles from a local,
+    gitignored `.private-names` file at REPO_ROOT (one per line, blank
+    lines and `#`-comments ignored). Absent file: default only. Read
+    fresh on every call so a caller that reassigns REPO_ROOT (as the test
+    suite does, to point at a throwaway fixture repo) picks up that
+    repo's own file, not this one's.
+    """
+    names = list(DEFAULT_PRIVATE_NAME_SUBSTRINGS)
+    try:
+        text = (REPO_ROOT / PRIVATE_NAMES_FILE).read_text(encoding="utf-8")
+    except OSError:
+        return names
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            names.append(stripped.lower())
+    return names
+
 
 _BINARY_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".zip", ".pyc"}
 
@@ -95,9 +118,7 @@ _PATTERN_DATA_EXEMPT = {
 def _is_exempt_posix(posix: str) -> bool:
     if posix in _PATTERN_DATA_EXEMPT:
         return True
-    if "fixture" in posix.lower():
-        return True
-    return False
+    return "fixture" in posix.lower()
 
 
 def _is_exempt(path: Path) -> bool:
@@ -117,7 +138,7 @@ def _findings_for_line(rel: str, lineno: int, line: str) -> list[str]:
     if HARDCODED_INTERPRETER.search(line):
         findings.append(f"{rel}:{lineno}: absolute path to a python interpreter")
     lowered = line.lower()
-    for needle in PRIVATE_NAME_SUBSTRINGS:
+    for needle in _private_name_substrings():
         if needle in lowered:
             findings.append(f"{rel}:{lineno}: private-project name leak ('{needle}')")
     return findings

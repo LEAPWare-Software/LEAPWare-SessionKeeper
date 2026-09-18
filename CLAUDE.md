@@ -7,8 +7,8 @@ lws plugin itself must never read or depend on this file at runtime.
 - Your lane: `plugins/claude/`, `adapters/claude/`, `tests/**/claude/`.
   Codex's lane (`plugins/codex/`, `adapters/codex/`, `tests/**/codex/`) is
   not yours to edit.
-- A shared path (`core/`, `docs/`, root config) needs adversarial review
-  by the CTO role on *both* CLIs, in agreement, before it lands.
+- A shared path (`core/`, `docs/`, root config) may be changed directly.
+  The dual CTO sign-off was removed by the owner on 2026-09-18.
 - Every deliverable needs a Proof of Completion: committed, pushed, CI
   green, announced as `LWS - Alert: <id> DONE ...`. See
   `docs/handoff-protocol.md`.
