@@ -41,6 +41,9 @@ step *n* is done and proven.
    for approval before building.
 5. Every deliverable follows `docs/handoff-protocol.md`: proof record,
    pushed, CI green, alert line `LWS - Alert: <id> DONE ...`.
+6. Master plan to 1.0.0 recorded at `docs/requirements/master-plan-1.0.0.md`
+   (owner-approved 2026-09-18). Build is on HARD HOLD pending BuildCraft
+   readiness; only Phase 0 of that plan may start.
 
 <!-- lws-handoff:begin -->
 
