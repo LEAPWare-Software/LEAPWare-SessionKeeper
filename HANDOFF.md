@@ -62,15 +62,13 @@ step *n* is done and proven.
 
 <!-- lws-handoff:begin -->
 
-Generated: 2026-09-18 19:15 UTC
-main SHA: dae28b0bf671e7597f009ea310d456d52fd67921
+Generated: 2026-09-18 19:27 UTC
+main SHA: 1534421559a56b05baed25aed1abce28d3c9a398
 CLI: unknown
 Session: unknown
 
 Open PRs:
 #12 docs(requirements): master plan for shipping lws 1.0.0 (docs/master-plan-1.0.0)
-#10 feat(ci): lws-hosted-runner check - GitHub-hosted runners only (directive 18) (feat/hosted-runner-only-check)
-#7 docs(handoff): bootstrap DONE, hosted-runner-only + worktree-location directives (docs/session-handoff)
 
 Deliverable proof state (from proof/):
 (none yet)
