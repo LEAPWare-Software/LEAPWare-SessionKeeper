@@ -16,7 +16,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-import lws_check_env_leak as check_mod  # noqa: E402
+import lws_check_env_leak as check_mod
 
 
 def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
@@ -30,9 +30,11 @@ def _init_repo(cwd: Path) -> None:
 
 
 def test_findings_for_line_catches_drive_letter_and_private_name():
-    findings = check_mod._findings_for_line("some/file.py", 3, r'path = "C:\Users\ramos\thing"')
+    findings = check_mod._findings_for_line(
+        "some/file.py", 3, r'path = "C:\Users\someone\example-private-project"'
+    )
     assert any("Windows drive letter" in f for f in findings)
-    assert any("private-project name leak" in f and "ramos" in f for f in findings)
+    assert any("private-project name leak" in f and "example-private-project" in f for f in findings)
 
 
 def test_findings_for_line_clean_line_has_no_findings():
@@ -76,7 +78,10 @@ def test_range_scan_catches_leak_committed_then_reverted(tmp_path):
     base_sha = _run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
 
     # Commit 1: add a leak.
-    target.write_text("nothing interesting here\nsee C:\\Users\\ramos\\leapware-cpt\\notes\n", encoding="utf-8")
+    target.write_text(
+        "nothing interesting here\nsee C:\\Users\\someone\\example-private-project\\notes\n",
+        encoding="utf-8",
+    )
     _run(["git", "add", "notes.md"], repo)
     _run(["git", "commit", "-q", "-m", "add a note"], repo)
 
@@ -98,7 +103,7 @@ def test_range_scan_catches_leak_committed_then_reverted(tmp_path):
     finally:
         check_mod.REPO_ROOT = original_root
 
-    assert any("private-project name leak" in f and "leapware-cpt" in f for f in findings)
+    assert any("private-project name leak" in f and "example-private-project" in f for f in findings)
     assert any("Windows drive letter" in f for f in findings)
 
 
@@ -141,7 +146,7 @@ def test_range_scan_skips_exempt_fixture_paths(tmp_path):
     _run(["git", "commit", "-q", "-m", "base"], repo)
     base_sha = _run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
 
-    target.write_text('{"path": "C:\\\\Users\\\\ramos\\\\leapware-cpt"}\n', encoding="utf-8")
+    target.write_text('{"path": "C:\\\\Users\\\\someone\\\\example-private-project"}\n', encoding="utf-8")
     _run(["git", "add", "."], repo)
     _run(["git", "commit", "-q", "-m", "edit fixture"], repo)
     head_sha = _run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
@@ -154,3 +159,27 @@ def test_range_scan_skips_exempt_fixture_paths(tmp_path):
         check_mod.REPO_ROOT = original_root
 
     assert findings == []
+
+
+def test_private_name_substrings_default_only_when_file_absent(tmp_path):
+    original_root = check_mod.REPO_ROOT
+    try:
+        check_mod.REPO_ROOT = tmp_path
+        assert check_mod._private_name_substrings() == check_mod.DEFAULT_PRIVATE_NAME_SUBSTRINGS
+    finally:
+        check_mod.REPO_ROOT = original_root
+
+
+def test_private_name_substrings_reads_local_gitignored_file(tmp_path):
+    (tmp_path / check_mod.PRIVATE_NAMES_FILE).write_text(
+        "# comment, ignored\n\nAdoptersSecretProject\n", encoding="utf-8"
+    )
+    original_root = check_mod.REPO_ROOT
+    try:
+        check_mod.REPO_ROOT = tmp_path
+        names = check_mod._private_name_substrings()
+        assert names == check_mod.DEFAULT_PRIVATE_NAME_SUBSTRINGS + ["adopterssecretproject"]
+        findings = check_mod._findings_for_line("some/file.py", 1, "path = AdoptersSecretProject/thing")
+        assert any("adopterssecretproject" in f for f in findings)
+    finally:
+        check_mod.REPO_ROOT = original_root
