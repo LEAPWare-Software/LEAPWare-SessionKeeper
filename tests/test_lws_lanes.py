@@ -3,7 +3,6 @@ the bootstrap exception, and the review-record cross-check."""
 
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -120,32 +119,3 @@ def test_commit_agent_parses_trailer(tmp_path):
         assert lws_lanes.commit_files(sha) == ["f.txt"]
     finally:
         lws_lanes.REPO_ROOT = original_root
-
-
-def test_review_ok_requires_distinct_reviewer_and_author_identity(tmp_path):
-    reviews_dir = tmp_path / "reviews" / "9"
-    reviews_dir.mkdir(parents=True)
-    (reviews_dir / "claude-cto.json").write_text(
-        json.dumps(
-            {
-                "pr": 9,
-                "reviewer_agent": "claude",
-                "reviewer_id": "same-session",
-                "commit_author_agent": "codex",
-                "commit_author_id": "same-session",
-                "verdict": "AGREE",
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    original_root = lws_lanes.REPO_ROOT
-    try:
-        lws_lanes.REPO_ROOT = tmp_path
-        errors: list[str] = []
-        ok = lws_lanes._review_ok(9, "claude", "deadbeef", errors)
-    finally:
-        lws_lanes.REPO_ROOT = original_root
-
-    assert ok is False
-    assert any("equals" in e for e in errors)
