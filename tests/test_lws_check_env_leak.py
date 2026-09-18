@@ -39,6 +39,31 @@ def test_findings_for_line_clean_line_has_no_findings():
     assert check_mod._findings_for_line("some/file.py", 1, "print('hello world')") == []
 
 
+def test_findings_for_line_does_not_match_escaped_newline_after_one_letter_key():
+    # A one-letter YAML key followed by an escaped newline, as it appears in
+    # Python source (e.g. a fixture building YAML text), must not read as a
+    # Windows drive path.
+    findings = check_mod._findings_for_line("some/file.py", 5, '    yaml_text = "a:\\n  b: 1\\n"')
+    assert not any("Windows drive letter" in f for f in findings)
+
+
+def test_findings_for_line_catches_drive_letter_with_directory_and_separator():
+    findings = check_mod._findings_for_line("some/file.py", 6, r'path = "C:\Users\someone\project"')
+    assert any("Windows drive letter" in f for f in findings)
+
+
+def test_findings_for_line_catches_drive_letter_with_file_extension():
+    findings = check_mod._findings_for_line("some/file.py", 7, r'path = "D:\repos\thing\file.py"')
+    assert any("Windows drive letter" in f for f in findings)
+
+
+def test_findings_for_line_bare_drive_and_one_component_does_not_trip():
+    # Deliberate narrowing: a drive letter plus a single directory component
+    # with no trailing separator is no longer flagged.
+    findings = check_mod._findings_for_line("some/file.py", 8, r'path = "C:\Users"')
+    assert not any("Windows drive letter" in f for f in findings)
+
+
 def test_range_scan_catches_leak_committed_then_reverted(tmp_path):
     repo = tmp_path / "fixture-repo"
     repo.mkdir()
