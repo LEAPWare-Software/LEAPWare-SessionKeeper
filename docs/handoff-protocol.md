@@ -68,3 +68,25 @@ commit message and/or PR description is sufficient; no separate proof
 file is required). Every proven delivery is announced with a line
 starting `LWS - Alert: <id> DONE ...` so it is grep-able across a long
 session.
+
+## Traps learned
+
+Moved here from `HANDOFF.md` when that file hit its own size cap. A cap
+reached means content moves out, never that meaning gets trimmed.
+
+- `lws_check_env_leak.py`'s drive-letter rule reads a one-letter key
+  followed by an escaped newline inside a Python string as a Windows path,
+  so a fixture written as a one-letter YAML key trips the leak check. Use
+  multi-letter keys. The same rule scans `HANDOFF.md` and this file, so do
+  not quote that regex in either.
+- `lws-env-leak-history` scans **every commit a pull request adds**, not
+  the final tree. A fix-forward commit cannot clear a leak already in the
+  branch's history — the branch has to be squashed first, and a force-push
+  needs the owner.
+- `scripts/lws_handoff.py --write` writes PR titles as mojibake when a
+  title contains a non-ASCII character. Keep pull request titles ASCII.
+- Background agents share one working tree. A `git checkout` while a
+  subagent is reading files silently hands it another branch's content,
+  and its findings will be about code you did not ask it to review. Tell
+  reviewers to copy what they need into a scratch directory, and do not
+  switch branches while one is live.
