@@ -44,6 +44,12 @@ jobs:
       - name: lws-prefix (every user-facing entrypoint starts with lws)
         run: python scripts/lws_check_prefix.py
 
+      - name: lws-hosted-runner (GitHub-hosted runners only, directive 18)
+        # Not gated on pull_request: a self-hosted runner reaching main by any
+        # route -- merge_group, a direct push, a workflow edited in the merge
+        # queue -- is the thing being prevented, so this runs on every event.
+        run: python scripts/lws_check_hosted_runner.py
+
       - name: lws-env-leak (no local-environment or private-project leak)
         run: python scripts/lws_check_env_leak.py
 
