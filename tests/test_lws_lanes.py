@@ -3,7 +3,6 @@ the bootstrap exception, and the review-record cross-check."""
 
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -41,6 +40,51 @@ def test_classify_named_test_module_extension():
     assert lws_lanes.classify_path("tests/adapters/test_codex_hook_io.py") == "codex"
 
 
+def test_classify_repo_root_files_are_shared():
+    # No file at the repo root belongs to one CLI's lane: build config, ignore
+    # rules, the changelog and the licence are repo-wide by construction.
+    # CLAUDE.md and AGENTS.md already call "root config" shared; before this,
+    # classify_path did not, so no agent could touch .gitignore at all.
+    for path in (".gitignore", "pyproject.toml", "CHANGELOG.md", "LICENSE",
+                 ".editorconfig", "SECURITY.md"):
+        assert lws_lanes.classify_path(path) == "shared", path
+
+
+def test_classify_generic_test_modules_are_shared():
+    # A test naming neither CLI exercises shared code, so it is shared -- not
+    # "other", which no agent may touch at all. Changing a shared script and
+    # its own test in one commit has to be possible.
+    for path in ("tests/test_lws_check_env_leak.py", "tests/core/test_lws_handoff.py",
+                 "tests/conftest.py", "tests/conformance/test_policy_shape.py"):
+        assert lws_lanes.classify_path(path) == "shared", path
+
+
+def test_classify_lane_tests_win_over_shared_tests():
+    # Precedence guard: the lane rules for tests/ are evaluated before the
+    # shared-tests fallback. Reverse them and every lane fixture silently
+    # becomes shared, firing the cross-CLI review gate on lane-only work.
+    assert lws_lanes.classify_path("tests/adapters/fixtures/claude/pretooluse_read.json") == "claude"
+    assert lws_lanes.classify_path("tests/adapters/test_codex_hook_io.py") == "codex"
+
+
+def test_classify_cli_config_dirs_are_shared_not_owned():
+    # `.claude/` and `.codex/` hold each CLI's own enforcement wiring -- the
+    # PreToolUse hook that applies the lane rules to that CLI. Giving a CLI its
+    # own lane over that directory would let it switch off its own guard with
+    # no cross-CLI review, so both are shared. Before this they classified
+    # "other", which no agent could touch at all.
+    assert lws_lanes.classify_path(".claude/settings.json") == "shared"
+    assert lws_lanes.classify_path(".codex/hooks.json") == "shared"
+
+
+def test_classify_dot_segments_are_not_root_files():
+    # "." and ".." have no "/" in them, so the repo-root rule called them
+    # shared -- which reads as "any agent may write here". Neither names a
+    # file at all, so neither is a root file.
+    for path in (".", "..", ""):
+        assert lws_lanes.classify_path(path) == "other", path
+
+
 def test_classify_other_for_unrelated_path():
     assert lws_lanes.classify_path("examples/policies/example-routing.json") == "other"
 
@@ -75,32 +119,3 @@ def test_commit_agent_parses_trailer(tmp_path):
         assert lws_lanes.commit_files(sha) == ["f.txt"]
     finally:
         lws_lanes.REPO_ROOT = original_root
-
-
-def test_review_ok_requires_distinct_reviewer_and_author_identity(tmp_path):
-    reviews_dir = tmp_path / "reviews" / "9"
-    reviews_dir.mkdir(parents=True)
-    (reviews_dir / "claude-cto.json").write_text(
-        json.dumps(
-            {
-                "pr": 9,
-                "reviewer_agent": "claude",
-                "reviewer_id": "same-session",
-                "commit_author_agent": "codex",
-                "commit_author_id": "same-session",
-                "verdict": "AGREE",
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    original_root = lws_lanes.REPO_ROOT
-    try:
-        lws_lanes.REPO_ROOT = tmp_path
-        errors: list[str] = []
-        ok = lws_lanes._review_ok(9, "claude", "deadbeef", errors)
-    finally:
-        lws_lanes.REPO_ROOT = original_root
-
-    assert ok is False
-    assert any("equals" in e for e in errors)

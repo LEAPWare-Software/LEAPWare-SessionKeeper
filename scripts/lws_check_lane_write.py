@@ -20,6 +20,18 @@ Reads one JSON event from stdin:
     `*** (Add|Update|Delete) File: <path>` header lines, the apply_patch
     patch format's documented way of naming the file(s) a patch touches.
 
+What this hook is NOT. It sees only the editing tools listed above, because
+that is all its matcher subscribes to. A write performed through a shell --
+`python -c "open(...)"`, a redirect, a patch piped into `git apply` -- never
+reaches it at all. So it is a same-session nudge and must not be read as a
+security boundary: it catches the mistake, not the determined evader. The
+`lws-lanes` CI check is the enforcement of record, and it works on what was
+actually committed, which no spelling of a path can disguise -- a git tree
+path can never contain a `..` component or a UNC prefix. Three rounds of
+adversarial review of this file found evasions (`\\\\?\\`, `//?/`, UNC admin
+shares, and an unresolved `..` in a relative path) and all are closed below,
+but the shell-shaped hole is structural and stays open by design.
+
 If no file path can be determined from the event shape, this hook does
 NOT deny — silently allowing an edit it can't parse is the safe failure
 direction for a same-session nudge that is not itself the enforcement of
@@ -37,9 +49,11 @@ body, not the exit code — see docs/install-claude.md / docs/install-codex.md).
 from __future__ import annotations
 
 import json
+import posixpath
 import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
@@ -81,15 +95,154 @@ def _extract_paths(agent: str, raw: dict) -> list[str]:
     return []
 
 
-def _relativize(path_str: str) -> str:
-    """Best-effort: turn an absolute path under REPO_ROOT into a repo-relative one."""
+WORKTREE_DIR = ".worktrees"
+
+# Belt-and-braces only: the walk already terminates when a path is its own
+# parent. Measured at roughly 0.8ms for a 100-level walk, so a bound generous
+# enough to never be the reason an in-repo file reads as "outside" costs
+# nothing. At 64 it was reachable -- a file more than ~60 levels below the
+# repo root, reached through an alias, returned None and was allowed.
+_MAX_ANCESTOR_WALK = 512
+
+
+def _strip_extended_prefix(path_str: str) -> str:
+    """Drop a Windows extended-length prefix, however it is spelled.
+
+    `Path.resolve()` preserves this prefix, so a path that is genuinely inside
+    the repo still fails `relative_to(REPO_ROOT)` with it attached. Normalising
+    it away is what stops `\\\\?\\<repo>\\plugins\\codex\\x.py` from reading as
+    "somewhere else entirely".
+
+    Both separator spellings count. Windows accepts `//?/C:/...` as the same
+    extended-length form and resolves it straight back to `\\\\?\\C:\\...`, so
+    matching only the literal backslashes leaves the identical evasion open
+    one keystroke away.
+    """
+    head = path_str[:8].replace("/", "\\")
+    if not head.startswith("\\\\?\\"):
+        return path_str
+    rest = path_str[4:]
+    if rest[:4].replace("/", "\\").upper() == "UNC\\":
+        return "\\\\" + rest[4:]
+    return rest
+
+
+def _repo_relative_by_identity(target: Path) -> Optional[str]:
+    """Repo-relative form of `target` found by filesystem identity, or None.
+
+    A lexical comparison cannot see through path aliasing: `\\\\host\\C$\\...`,
+    a `subst`ed drive and a junction all name the same file as `C:\\...` while
+    sharing no common prefix with it. Walking up from the target to the first
+    ancestor whose (st_dev, st_ino) matches the repo root answers the question
+    the string comparison cannot.
+
+    The target itself usually does not exist -- a Write creating a new file is
+    the normal case -- so a failed stat keeps walking rather than giving up.
+    """
     try:
-        p = Path(path_str)
-        if p.is_absolute():
-            return str(p.resolve().relative_to(REPO_ROOT.resolve())).replace("\\", "/")
+        root_stat = REPO_ROOT.resolve().stat()
+    except OSError:
+        return None
+    root_key = (root_stat.st_dev, root_stat.st_ino)
+
+    tail: list[str] = []
+    current = target
+    for _ in range(_MAX_ANCESTOR_WALK):
+        try:
+            st = current.stat()
+        except (OSError, ValueError):
+            st = None
+        if st is not None and (st.st_dev, st.st_ino) == root_key:
+            return "/".join(reversed(tail))
+        parent = current.parent
+        if parent == current:
+            return None
+        tail.append(current.name)
+        current = parent
+    return None
+
+
+def _strip_worktree_prefix(rel: str) -> str:
+    """Map `.worktrees/<branch>/<path>` to `<path>`.
+
+    A linked worktree is another checkout of this repo, not source sitting in
+    it. Directive 19 and CLAUDE.md put every worktree exactly under
+    `.worktrees/<branch>`, so classifying by the literal path makes every file
+    in a worktree "other" -- and the guard then denies every edit made in one,
+    including the edits needed to fix the guard.
+
+    `<branch>` is not always one segment. A branch name containing a slash --
+    `fix/lane-classify`, the shape this repo's own branches use -- nests on
+    disk, so the worktree root is found by looking for the `.git` entry every
+    checkout carries rather than by counting segments. Only when no checkout
+    is found does it fall back to stripping two, which merely restores the
+    previous behaviour for a path that does not exist on disk.
+    """
+    parts = rel.split("/")
+    if len(parts) <= 2 or parts[0] != WORKTREE_DIR:
+        return rel
+
+    # The DEEPEST checkout wins, not the first found. A stale `.git` left
+    # higher up by an earlier worktree would otherwise truncate the path at
+    # the wrong place and deny every write in a live, valid worktree.
+    deepest = None
+    for depth in range(2, len(parts)):
+        try:
+            if (REPO_ROOT.joinpath(*parts[:depth]) / ".git").exists():
+                deepest = depth
+        except OSError:
+            break
+    if deepest is not None:
+        return "/".join(parts[deepest:])
+    return "/".join(parts[2:])
+
+
+def _relativize(path_str: str) -> Optional[str]:
+    """Repo-relative form of `path_str`, or None when it is KNOWN to be outside.
+
+    None means "not this repo's business" -- a scratch file, a temp directory,
+    another project elsewhere on the machine. The lane rules classify paths
+    *within* this repo, and denying everything else would turn a repo lane
+    guard into a machine-wide write block for any session that has this repo
+    as its project directory.
+
+    None must never mean "could not tell". A path this function cannot resolve
+    is handed back as-is, which classifies "other" and denies: an unreadable
+    path is not evidence of innocence. None is earned only by a clean
+    resolution that lands outside the repo both lexically AND by filesystem
+    identity.
+    """
+    candidate = _strip_extended_prefix(path_str)
+    try:
+        p = Path(candidate)
+        if not p.is_absolute():
+            # `..` has to be collapsed before classification. classify_path
+            # matches prefixes, so `plugins/codex/../../plugins/claude/x.py`
+            # otherwise reads as codex's lane while targeting claude's -- and
+            # a repo-relative path is exactly what codex's apply_patch
+            # `*** Update File:` header carries.
+            norm = posixpath.normpath(candidate.replace("\\", "/"))
+            if norm == ".." or norm.startswith("../"):
+                # Escapes the repo, but relative to what? It resolves against
+                # the process's working directory, which this hook does not
+                # know. Undeterminable, so fail closed.
+                return path_str.replace("\\", "/")
+            return _strip_worktree_prefix(norm)
+        resolved = p.resolve()
+        root = REPO_ROOT.resolve()
     except (OSError, ValueError):
-        pass
-    return path_str.replace("\\", "/")
+        return path_str.replace("\\", "/")  # undeterminable -> fail closed
+
+    try:
+        # PurePath.relative_to is case-insensitive on Windows, which is what
+        # makes a differently-cased in-repo path still compare as in-repo.
+        rel = str(resolved.relative_to(root)).replace("\\", "/")
+    except ValueError:
+        rel = _repo_relative_by_identity(resolved)
+        if rel is None:
+            return None  # outside lexically and by identity: genuinely elsewhere
+
+    return _strip_worktree_prefix(rel)
 
 
 def evaluate(agent: str, raw: dict) -> dict:
@@ -97,6 +250,8 @@ def evaluate(agent: str, raw: dict) -> dict:
     offenders = []
     for path_str in paths:
         rel = _relativize(path_str)
+        if rel is None:
+            continue  # outside this repo -- see _relativize
         cls = classify_path(rel)
         if cls not in (agent, "shared"):
             offenders.append(rel)

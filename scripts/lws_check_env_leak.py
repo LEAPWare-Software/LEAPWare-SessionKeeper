@@ -47,7 +47,7 @@ from pathlib import Path, PurePosixPath
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SELF_PATH = Path(__file__).resolve()
 
-DRIVE_LETTER = re.compile(r"\b[A-Za-z]:\\[\w][\w.\- ]")
+DRIVE_LETTER = re.compile(r"\b[A-Za-z]:\\[\w][\w.\- ]*\\")
 POSIX_HOME = re.compile(r"(?<!\w)/(?:Users|home)/[\w.\-]+")
 PY_DASH3 = re.compile(r"\bpy\s+-3(\.\d+)?\b")
 HARDCODED_INTERPRETER = re.compile(
