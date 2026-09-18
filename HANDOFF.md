@@ -62,15 +62,14 @@ step *n* is done and proven.
 
 <!-- lws-handoff:begin -->
 
-Generated: 2026-09-17 22:46 UTC
-main SHA: e0cba2783108a01c27137d6f6118b41704e22dd1
+Generated: 2026-09-18 19:15 UTC
+main SHA: dae28b0bf671e7597f009ea310d456d52fd67921
 CLI: unknown
 Session: unknown
 
 Open PRs:
+#12 docs(requirements): master plan for shipping lws 1.0.0 (docs/master-plan-1.0.0)
 #10 feat(ci): lws-hosted-runner check - GitHub-hosted runners only (directive 18) (feat/hosted-runner-only-check)
-#9 fix(lanes): classify root files and generic tests as shared; stop denying writes outside the repo (fix/lane-classify-root-and-generic-tests)
-#8 fix(privacy): genericize hard-coded private-name needles (fix/genericize-private-names)
 #7 docs(handoff): bootstrap DONE, hosted-runner-only + worktree-location directives (docs/session-handoff)
 
 Deliverable proof state (from proof/):
