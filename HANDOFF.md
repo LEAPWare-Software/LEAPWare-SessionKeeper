@@ -45,13 +45,13 @@ step *n* is done and proven.
 
 <!-- lws-handoff:begin -->
 
-Generated: 2026-09-18 19:37 UTC
-main SHA: ecd51e31036e53c7665b3eb53a8c4b1ed8cde234
-CLI: unknown
-Session: unknown
+Generated: 2026-09-18 19:55 UTC
+main SHA: 90e719855ccce31612ca8e38c7d36a390955332f
+CLI: claude
+Session: fix-handoff-check-verifies-facts
 
 Open PRs:
-(unavailable: no `gh` auth in this environment, or no open PRs)
+#15 fix(handoff): make the check verify the block's facts, not just its shape (fix/handoff-check-verifies-facts)
 
 Deliverable proof state (from proof/):
 (none yet)
@@ -94,9 +94,13 @@ the plan; the commands above are the facts.
   `git ls-files --others --exclude-standard` too.
 - Squash-merge only happens through the merge queue — never merge locally
   and push to `main`.
-- `scripts/lws_handoff.py --write` needs `gh` auth for the PR list and
-  degrades to "(unavailable)" instead of failing, so a green `--check`
-  does not prove the list is current — re-read "Generated".
+- `scripts/lws_handoff.py --write` needs `gh` auth for the PR list; without
+  it the block now writes the unmistakable `(UNKNOWN - gh unavailable,
+  this block is not trustworthy)` rather than an ambiguous
+  "(unavailable)". `--check` only validates shape — it never re-derives
+  facts. Use `--check-live` (PR-only in CI, needs `gh` auth) to catch a
+  stale SHA or PR list; a bare `--check` passing proves nothing about
+  truth, only shape.
 - Four more, on the CI checks and on sharing a working tree with
   subagents: see "Traps learned" in `docs/handoff-protocol.md`.
 - Delegate-only mode (lw-watchtower) was left ON globally on 2026-09-18.

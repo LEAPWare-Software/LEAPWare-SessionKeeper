@@ -45,6 +45,14 @@ target — `scripts/lws_handoff.py --check` fails the build over it. A
 one-page handoff that nobody reads in full is worse than no handoff;
 trim prose before growing the cap.
 
+## This file's own size cap
+
+This file is the designated overflow target when `HANDOFF.md` hits its own
+6000-byte cap, so it needs headroom — but it is not unbounded either.
+`scripts/lws_handoff.py --check` fails the build if this file exceeds
+**12000 bytes**. Trim it before it gets there; move stale "Traps learned"
+entries out or condense them rather than letting this file grow forever.
+
 ## Done means committed and pushed
 
 A handoff is DONE only when it is committed to the branch and pushed to
