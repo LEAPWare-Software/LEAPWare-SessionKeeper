@@ -25,9 +25,13 @@ owner's original, unelaborated wording.
    both — no reporting-only constraint on either CLI.
 5. Lanes: Codex works only on the Codex part, Claude only on the Claude
    part. Shared parts (`core/`, `scripts/`, `.github/`, `docs/`,
-   `proof/`, `reviews/`) may be changed by either CLI only after the
-   CTO/CIO role on **each** CLI adversarially checks and agrees; the
-   owner is not in that loop.
+   `proof/`, `reviews/`) may be changed by either CLI.
+   **Amended by the owner 2026-09-18: the dual CTO/CIO sign-off is
+   removed.** The lane split stands and is still enforced by
+   `lws-lanes`; the shared-path review records are not. Original wording:
+   shared parts "may be changed by either CLI only after the CTO/CIO role
+   on **each** CLI adversarially checks and agrees; the owner is not in
+   that loop."
 6. Status line: shows ONE SHORT TAG for the session's runway state
    (proposed: `LWS ok`, `LWS WIND 80%`, `LWS LAND 90%`, `LWS HOFF 95%`,
    `LWS RET` for retired — final label text needs owner approval before
